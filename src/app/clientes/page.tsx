@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Plus, Search, Phone, Mail, Building2, MapPin, Trash2, X } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Plus, Search, Phone, Mail, Building2, MapPin, Trash2, X, Upload, CheckCircle, AlertCircle } from 'lucide-react'
 import { getClientes, createCliente, deleteCliente } from '@/lib/db'
 import type { Cliente } from '@/lib/supabase'
 
@@ -143,11 +143,16 @@ function ClienteModal({ onClose, onSave }: {
   )
 }
 
+type ResultadoImport = { ok: number; erros: number }
+
 export default function ClientesPage() {
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [busca, setBusca] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [importando, setImportando] = useState(false)
+  const [resultado, setResultado] = useState<ResultadoImport | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     getClientes().then(data => { setClientes(data); setLoading(false) })
@@ -182,6 +187,63 @@ export default function ClientesPage() {
     setClientes(prev => prev.filter(c => c.id !== id))
   }
 
+  async function handleImportExcel(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!fileInputRef.current) return
+    fileInputRef.current.value = ''
+    if (!file) return
+
+    setImportando(true)
+    setResultado(null)
+
+    try {
+      const XLSX = await import('xlsx')
+      const buffer = await file.arrayBuffer()
+      const wb = XLSX.read(buffer, { type: 'array' })
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' })
+
+      const norm = (s: unknown) => String(s ?? '').trim().toLowerCase()
+
+      let ok = 0
+      let erros = 0
+
+      for (const row of rows) {
+        const col = Object.fromEntries(
+          Object.entries(row).map(([k, v]) => [norm(k), String(v).trim()])
+        )
+        const nome = col['nome']
+        if (!nome) { erros++; continue }
+
+        try {
+          const novo = await createCliente({
+            nome,
+            empresa: col['empresa'] || nome,
+            cnpj: col['cnpj'] || undefined,
+            telefone: col['telefone'] || undefined,
+            email: col['email'] || undefined,
+            cidade: col['cidade'] || undefined,
+            segmento: col['segmento'] || undefined,
+            endereco: undefined,
+            estado: undefined,
+            observacoes: undefined,
+          })
+          setClientes(prev => [novo, ...prev])
+          ok++
+        } catch {
+          erros++
+        }
+      }
+
+      setResultado({ ok, erros })
+    } catch {
+      setResultado({ ok: 0, erros: 1 })
+    } finally {
+      setImportando(false)
+      setTimeout(() => setResultado(null), 5000)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -199,14 +261,41 @@ export default function ClientesPage() {
             {clientes.length} cliente{clientes.length !== 1 ? 's' : ''} cadastrado{clientes.length !== 1 ? 's' : ''}
           </p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium"
-        >
-          <Plus size={16} />
-          Novo Cliente
-        </button>
+        <div className="flex items-center gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            className="hidden"
+            onChange={handleImportExcel}
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importando}
+            className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Upload size={16} />
+            {importando ? 'Importando...' : 'Importar Excel'}
+          </button>
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium"
+          >
+            <Plus size={16} />
+            Novo Cliente
+          </button>
+        </div>
       </div>
+
+      {resultado && (
+        <div className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium ${resultado.erros === 0 ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-amber-50 text-amber-800 border border-amber-200'}`}>
+          {resultado.erros === 0
+            ? <CheckCircle size={16} className="shrink-0" />
+            : <AlertCircle size={16} className="shrink-0" />}
+          {resultado.ok > 0 && `${resultado.ok} cliente${resultado.ok !== 1 ? 's' : ''} importado${resultado.ok !== 1 ? 's' : ''} com sucesso.`}
+          {resultado.erros > 0 && ` ${resultado.erros} linha${resultado.erros !== 1 ? 's' : ''} ignorada${resultado.erros !== 1 ? 's' : ''} (sem nome ou erro).`}
+        </div>
+      )}
 
       <div className="relative">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
