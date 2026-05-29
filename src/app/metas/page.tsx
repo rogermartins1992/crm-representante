@@ -42,8 +42,8 @@ export default function MetasPage() {
 
   async function handleUpsert(mes: number, ano: number, valor: number) {
     setSaving(true)
-    const ok = await upsertMeta(mes, ano, valor)
-    if (ok) await carregarMetas()
+    await upsertMeta(mes, ano, valor)
+    await carregarMetas()
     setSaving(false)
   }
 

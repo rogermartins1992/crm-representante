@@ -176,17 +176,17 @@ export default function VisitasPage() {
       data_followup: form.data_followup,
       followup_enviado: false,
     })
-    if (nova) setVisitas(prev => [{ ...nova, clientes: cliente }, ...prev])
+    setVisitas(prev => [{ ...nova, clientes: cliente }, ...prev])
   }
 
   async function marcarRealizada(id: string) {
-    const ok = await updateVisita(id, { status: 'realizada' })
-    if (ok) setVisitas(prev => prev.map(v => v.id === id ? { ...v, status: 'realizada' as const } : v))
+    await updateVisita(id, { status: 'realizada' })
+    setVisitas(prev => prev.map(v => v.id === id ? { ...v, status: 'realizada' as const } : v))
   }
 
   async function marcarFollowup(id: string) {
-    const ok = await updateVisita(id, { followup_enviado: true })
-    if (ok) setVisitas(prev => prev.map(v => v.id === id ? { ...v, followup_enviado: true } : v))
+    await updateVisita(id, { followup_enviado: true })
+    setVisitas(prev => prev.map(v => v.id === id ? { ...v, followup_enviado: true } : v))
   }
 
   function followupTag(v: Visita) {

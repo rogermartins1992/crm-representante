@@ -166,20 +166,20 @@ export default function PedidosPage() {
       observacoes: form.observacoes,
       lembrete_faturamento_enviado: false,
     })
-    if (novo) setPedidos(prev => [{ ...novo, clientes: cliente }, ...prev])
+    setPedidos(prev => [{ ...novo, clientes: cliente }, ...prev])
   }
 
   async function avancar(id: string, statusAtual: Pedido['status']) {
     const idx = STATUS_FLOW.indexOf(statusAtual)
     const next = STATUS_FLOW[idx + 1]
     if (!next) return
-    const ok = await updatePedidoStatus(id, next)
-    if (ok) setPedidos(prev => prev.map(p => p.id === id ? { ...p, status: next } : p))
+    await updatePedidoStatus(id, next)
+    setPedidos(prev => prev.map(p => p.id === id ? { ...p, status: next } : p))
   }
 
   async function lembrete(id: string) {
-    const ok = await marcarLembreteEnviado(id)
-    if (ok) setPedidos(prev => prev.map(p => p.id === id ? { ...p, lembrete_faturamento_enviado: true } : p))
+    await marcarLembreteEnviado(id)
+    setPedidos(prev => prev.map(p => p.id === id ? { ...p, lembrete_faturamento_enviado: true } : p))
   }
 
   const tabCounts: Record<string, number> = {

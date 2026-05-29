@@ -173,13 +173,13 @@ export default function ClientesPage() {
       segmento: form.segmento,
       observacoes: form.observacoes,
     })
-    if (novo) setClientes(prev => [novo, ...prev])
+    setClientes(prev => [novo, ...prev])
   }
 
   async function remover(id: string) {
     if (!confirm('Remover este cliente?')) return
-    const ok = await deleteCliente(id)
-    if (ok) setClientes(prev => prev.filter(c => c.id !== id))
+    await deleteCliente(id)
+    setClientes(prev => prev.filter(c => c.id !== id))
   }
 
   if (loading) {
