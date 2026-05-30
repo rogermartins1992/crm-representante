@@ -143,7 +143,7 @@ function ClienteModal({ onClose, onSave }: {
   )
 }
 
-type ResultadoImport = { ok: number; erros: number }
+type ResultadoImport = { ok: number; erros: number; ultimoErro?: string }
 
 export default function ClientesPage() {
   const [clientes, setClientes] = useState<Cliente[]>([])
@@ -197,50 +197,73 @@ export default function ClientesPage() {
     setResultado(null)
 
     try {
+      console.log('[Import] Arquivo:', file.name, file.size, 'bytes', file.type)
+
       const XLSX = await import('xlsx')
+      console.log('[Import] xlsx carregado')
+
       const buffer = await file.arrayBuffer()
       const wb = XLSX.read(buffer, { type: 'array' })
+      console.log('[Import] Planilhas:', wb.SheetNames)
+
       const ws = wb.Sheets[wb.SheetNames[0]]
       const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' })
+      console.log('[Import] Linhas lidas:', rows.length)
+      if (rows.length > 0) console.log('[Import] Primeira linha (raw):', rows[0])
 
       const norm = (s: unknown) => String(s ?? '').trim().toLowerCase()
+      const str = (v: unknown) => String(v ?? '').trim()
 
       let ok = 0
       let erros = 0
+      let ultimoErro: string | undefined
 
       for (const row of rows) {
         const col = Object.fromEntries(
-          Object.entries(row).map(([k, v]) => [norm(k), String(v).trim()])
+          Object.entries(row).map(([k, v]) => [norm(k), str(v)])
         )
+        console.log('[Import] Linha normalizada:', col)
+
         const nome = col['nome']
-        if (!nome) { erros++; continue }
+        if (!nome) {
+          console.warn('[Import] Linha ignorada (sem nome):', col)
+          erros++
+          continue
+        }
+
+        // Monta payload sem campos vazios para não violar constraints do Supabase
+        const payload: Parameters<typeof createCliente>[0] = {
+          nome,
+          empresa: col['empresa'] || nome,
+          ...(col['cnpj'] && { cnpj: col['cnpj'] }),
+          ...(col['telefone'] && { telefone: col['telefone'] }),
+          ...(col['email'] && { email: col['email'] }),
+          ...(col['cidade'] && { cidade: col['cidade'] }),
+          ...(col['segmento'] && { segmento: col['segmento'] }),
+        }
 
         try {
-          const novo = await createCliente({
-            nome,
-            empresa: col['empresa'] || nome,
-            cnpj: col['cnpj'] || undefined,
-            telefone: col['telefone'] || undefined,
-            email: col['email'] || undefined,
-            cidade: col['cidade'] || undefined,
-            segmento: col['segmento'] || undefined,
-            endereco: undefined,
-            estado: undefined,
-            observacoes: undefined,
-          })
+          const novo = await createCliente(payload)
+          console.log('[Import] Cliente inserido:', novo.id, novo.nome)
           setClientes(prev => [novo, ...prev])
           ok++
-        } catch {
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err)
+          console.error('[Import] Falha ao inserir:', payload, '→', msg)
+          ultimoErro = msg
           erros++
         }
       }
 
-      setResultado({ ok, erros })
-    } catch {
-      setResultado({ ok: 0, erros: 1 })
+      console.log('[Import] Concluído:', { ok, erros, ultimoErro })
+      setResultado({ ok, erros, ultimoErro })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('[Import] Erro fatal:', msg)
+      setResultado({ ok: 0, erros: 1, ultimoErro: msg })
     } finally {
       setImportando(false)
-      setTimeout(() => setResultado(null), 5000)
+      setTimeout(() => setResultado(null), 10000)
     }
   }
 
@@ -288,12 +311,21 @@ export default function ClientesPage() {
       </div>
 
       {resultado && (
-        <div className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium ${resultado.erros === 0 ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-amber-50 text-amber-800 border border-amber-200'}`}>
-          {resultado.erros === 0
-            ? <CheckCircle size={16} className="shrink-0" />
-            : <AlertCircle size={16} className="shrink-0" />}
-          {resultado.ok > 0 && `${resultado.ok} cliente${resultado.ok !== 1 ? 's' : ''} importado${resultado.ok !== 1 ? 's' : ''} com sucesso.`}
-          {resultado.erros > 0 && ` ${resultado.erros} linha${resultado.erros !== 1 ? 's' : ''} ignorada${resultado.erros !== 1 ? 's' : ''} (sem nome ou erro).`}
+        <div className={`px-4 py-3 rounded-lg text-sm border ${resultado.ok > 0 && resultado.erros === 0 ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : resultado.erros > 0 ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-red-50 text-red-800 border-red-200'}`}>
+          <div className="flex items-center gap-2 font-medium">
+            {resultado.erros === 0
+              ? <CheckCircle size={16} className="shrink-0" />
+              : <AlertCircle size={16} className="shrink-0" />}
+            <span>
+              {resultado.ok > 0 && `${resultado.ok} cliente${resultado.ok !== 1 ? 's' : ''} importado${resultado.ok !== 1 ? 's' : ''} com sucesso.`}
+              {resultado.erros > 0 && ` ${resultado.erros} linha${resultado.erros !== 1 ? 's' : ''} com erro.`}
+            </span>
+          </div>
+          {resultado.ultimoErro && (
+            <p className="mt-1 text-xs opacity-80 font-mono break-all">
+              Último erro: {resultado.ultimoErro}
+            </p>
+          )}
         </div>
       )}
 

@@ -15,12 +15,16 @@ export async function getClientes(): Promise<Cliente[]> {
 export async function createCliente(
   c: Omit<Cliente, 'id' | 'created_at' | 'updated_at'>
 ): Promise<Cliente> {
+  console.log('[createCliente] payload:', JSON.stringify(c))
   const { data, error } = await supabase
     .from('clientes')
     .insert(c)
     .select()
     .single()
-  if (error) throw error
+  if (error) {
+    console.error('[createCliente] error:', error.code, error.message, error.details, error.hint)
+    throw error
+  }
   return data
 }
 
