@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Plus, Search, Phone, Mail, Building2, MapPin, Trash2, X, Upload, CheckCircle, AlertCircle } from 'lucide-react'
 import { getClientes, createCliente, deleteCliente } from '@/lib/db'
+import { supabase } from '@/lib/supabase'
 import type { Cliente } from '@/lib/supabase'
 
 const segmentos = [
@@ -197,15 +198,14 @@ export default function ClientesPage() {
     setResultado(null)
 
     try {
-      console.log('[Import] Arquivo:', file.name, file.size, 'bytes', file.type)
+      // Diagnóstico: ver colunas reais da tabela no Supabase
+      const { data: amostra, error: errAmostra } = await supabase.from('clientes').select('*').limit(1)
+      console.log('[Import] Colunas da tabela clientes:',
+        errAmostra ? `ERRO: ${errAmostra.message}` : Object.keys(amostra?.[0] ?? {}).join(', ') || '(tabela vazia — sem linhas para inspecionar)')
 
       const XLSX = await import('xlsx')
-      console.log('[Import] xlsx carregado')
-
       const buffer = await file.arrayBuffer()
       const wb = XLSX.read(buffer, { type: 'array' })
-      console.log('[Import] Planilhas:', wb.SheetNames)
-
       const ws = wb.Sheets[wb.SheetNames[0]]
       const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' })
       console.log('[Import] Linhas lidas:', rows.length)
@@ -222,29 +222,20 @@ export default function ClientesPage() {
         const col = Object.fromEntries(
           Object.entries(row).map(([k, v]) => [norm(k), str(v)])
         )
-        console.log('[Import] Linha normalizada:', col)
 
         const nome = col['nome']
-        if (!nome) {
-          console.warn('[Import] Linha ignorada (sem nome):', col)
-          erros++
-          continue
-        }
+        if (!nome) { erros++; continue }
 
-        // Monta payload sem campos vazios para não violar constraints do Supabase
         const payload: Parameters<typeof createCliente>[0] = {
           nome,
-          empresa: col['empresa'] || nome,
-          ...(col['cnpj'] && { cnpj: col['cnpj'] }),
           ...(col['telefone'] && { telefone: col['telefone'] }),
-          ...(col['email'] && { email: col['email'] }),
-          ...(col['cidade'] && { cidade: col['cidade'] }),
+          ...(col['cidade']   && { cidade:   col['cidade']   }),
           ...(col['segmento'] && { segmento: col['segmento'] }),
         }
+        console.log('[Import] Payload:', payload)
 
         try {
           const novo = await createCliente(payload)
-          console.log('[Import] Cliente inserido:', novo.id, novo.nome)
           setClientes(prev => [novo, ...prev])
           ok++
         } catch (err) {

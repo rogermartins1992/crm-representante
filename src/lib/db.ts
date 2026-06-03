@@ -13,7 +13,7 @@ export async function getClientes(): Promise<Cliente[]> {
 }
 
 export async function createCliente(
-  c: Omit<Cliente, 'id' | 'created_at' | 'updated_at'>
+  c: Pick<Cliente, 'nome'> & Partial<Omit<Cliente, 'id' | 'nome' | 'created_at' | 'updated_at'>>
 ): Promise<Cliente> {
   const { data, error } = await supabase
     .from('clientes')
