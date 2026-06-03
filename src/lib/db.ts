@@ -8,22 +8,20 @@ export async function getClientes(): Promise<Cliente[]> {
     .from('clientes')
     .select('*')
     .order('empresa')
-  if (error) throw error
+  if (error) throw new Error(`[${error.code}] ${error.message}${error.details ? ' — ' + error.details : ''}`)
   return data ?? []
 }
 
 export async function createCliente(
   c: Omit<Cliente, 'id' | 'created_at' | 'updated_at'>
 ): Promise<Cliente> {
-  console.log('[createCliente] payload:', JSON.stringify(c))
   const { data, error } = await supabase
     .from('clientes')
     .insert(c)
     .select()
     .single()
   if (error) {
-    console.error('[createCliente] error:', error.code, error.message, error.details, error.hint)
-    throw error
+    throw new Error(`[${error.code}] ${error.message}${error.details ? ' — ' + error.details : ''}`)
   }
   return data
 }
@@ -33,12 +31,12 @@ export async function updateCliente(id: string, c: Partial<Cliente>): Promise<vo
     .from('clientes')
     .update({ ...c, updated_at: new Date().toISOString() })
     .eq('id', id)
-  if (error) throw error
+  if (error) throw new Error(`[${error.code}] ${error.message}${error.details ? ' — ' + error.details : ''}`)
 }
 
 export async function deleteCliente(id: string): Promise<void> {
   const { error } = await supabase.from('clientes').delete().eq('id', id)
-  if (error) throw error
+  if (error) throw new Error(`[${error.code}] ${error.message}${error.details ? ' — ' + error.details : ''}`)
 }
 
 // ── Visitas ───────────────────────────────────────────────
@@ -48,7 +46,7 @@ export async function getVisitas(): Promise<Visita[]> {
     .from('visitas')
     .select('*, clientes(*)')
     .order('data_visita', { ascending: false })
-  if (error) throw error
+  if (error) throw new Error(`[${error.code}] ${error.message}${error.details ? ' — ' + error.details : ''}`)
   return data ?? []
 }
 
@@ -60,7 +58,7 @@ export async function createVisita(
     .insert(v)
     .select('*, clientes(*)')
     .single()
-  if (error) throw error
+  if (error) throw new Error(`[${error.code}] ${error.message}${error.details ? ' — ' + error.details : ''}`)
   return data
 }
 
@@ -69,7 +67,7 @@ export async function updateVisita(id: string, v: Partial<Visita>): Promise<void
     .from('visitas')
     .update({ ...v, updated_at: new Date().toISOString() })
     .eq('id', id)
-  if (error) throw error
+  if (error) throw new Error(`[${error.code}] ${error.message}${error.details ? ' — ' + error.details : ''}`)
 }
 
 // ── Pedidos ───────────────────────────────────────────────
@@ -79,7 +77,7 @@ export async function getPedidos(): Promise<Pedido[]> {
     .from('pedidos')
     .select('*, clientes(*)')
     .order('data_pedido', { ascending: false })
-  if (error) throw error
+  if (error) throw new Error(`[${error.code}] ${error.message}${error.details ? ' — ' + error.details : ''}`)
   return data ?? []
 }
 
@@ -91,7 +89,7 @@ export async function createPedido(
     .insert(p)
     .select('*, clientes(*)')
     .single()
-  if (error) throw error
+  if (error) throw new Error(`[${error.code}] ${error.message}${error.details ? ' — ' + error.details : ''}`)
   return data
 }
 
@@ -103,7 +101,7 @@ export async function updatePedidoStatus(
     .from('pedidos')
     .update({ status, updated_at: new Date().toISOString() })
     .eq('id', id)
-  if (error) throw error
+  if (error) throw new Error(`[${error.code}] ${error.message}${error.details ? ' — ' + error.details : ''}`)
 }
 
 export async function marcarLembreteEnviado(id: string): Promise<void> {
@@ -111,7 +109,7 @@ export async function marcarLembreteEnviado(id: string): Promise<void> {
     .from('pedidos')
     .update({ lembrete_faturamento_enviado: true, updated_at: new Date().toISOString() })
     .eq('id', id)
-  if (error) throw error
+  if (error) throw new Error(`[${error.code}] ${error.message}${error.details ? ' — ' + error.details : ''}`)
 }
 
 // ── Metas ─────────────────────────────────────────────────
@@ -123,7 +121,7 @@ export async function getMeta(mes: number, ano: number): Promise<Meta | null> {
     .eq('mes', mes)
     .eq('ano', ano)
     .maybeSingle()
-  if (error) throw error
+  if (error) throw new Error(`[${error.code}] ${error.message}${error.details ? ' — ' + error.details : ''}`)
   return data
 }
 
@@ -134,7 +132,7 @@ export async function getMetas(): Promise<Meta[]> {
     .order('ano', { ascending: false })
     .order('mes', { ascending: false })
     .limit(12)
-  if (error) throw error
+  if (error) throw new Error(`[${error.code}] ${error.message}${error.details ? ' — ' + error.details : ''}`)
   return data ?? []
 }
 
@@ -146,7 +144,7 @@ export async function upsertMeta(
   const { error } = await supabase
     .from('metas')
     .upsert({ mes, ano, valor_meta }, { onConflict: 'mes,ano' })
-  if (error) throw error
+  if (error) throw new Error(`[${error.code}] ${error.message}${error.details ? ' — ' + error.details : ''}`)
 }
 
 export async function getVendasMes(mes: number, ano: number): Promise<number> {
@@ -161,6 +159,6 @@ export async function getVendasMes(mes: number, ano: number): Promise<number> {
     .lte('data_pedido', fimMes)
     .in('status', ['aprovado', 'em_producao', 'faturado', 'entregue'])
 
-  if (error) throw error
+  if (error) throw new Error(`[${error.code}] ${error.message}${error.details ? ' — ' + error.details : ''}`)
   return (data ?? []).reduce((s, p) => s + p.valor_total, 0)
 }
