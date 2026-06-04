@@ -24,7 +24,7 @@ function ClienteModal({ onClose, onSave }: {
   }
 
   async function handleSave() {
-    if (!form.nome || !form.empresa) return
+    if (!form.nome && !form.empresa) return
     setSaving(true)
     await onSave(form)
     setSaving(false)
@@ -41,7 +41,7 @@ function ClienteModal({ onClose, onSave }: {
         <div className="p-6 space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nome do Contato *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Nome do Contato</label>
               <input
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="Ex: João Silva"
@@ -50,7 +50,7 @@ function ClienteModal({ onClose, onSave }: {
               />
             </div>
             <div className="col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Empresa *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Empresa</label>
               <input
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="Razão Social"
@@ -133,7 +133,7 @@ function ClienteModal({ onClose, onSave }: {
           </button>
           <button
             onClick={handleSave}
-            disabled={!form.nome || !form.empresa || saving}
+            disabled={(!form.nome && !form.empresa) || saving}
             className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {saving ? 'Salvando...' : 'Salvar Cliente'}
@@ -168,8 +168,8 @@ export default function ClientesPage() {
 
   async function salvar(form: Partial<Cliente>) {
     const novo = await createCliente({
-      nome: form.nome!,
-      empresa: form.empresa!,
+      nome: form.nome,
+      empresa: form.empresa,
       cnpj: form.cnpj,
       telefone: form.telefone,
       email: form.email,
