@@ -2,34 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import { Plus, Calendar, X, CheckCircle2, AlertTriangle } from 'lucide-react'
-import { getVisitas, createVisita, updateVisita, getClientes } from '@/lib/db'
+import { getVisitas, createVisita, updateVisita, getClientes, createLembrete } from '@/lib/db'
 import type { Visita, Cliente } from '@/lib/supabase'
 import StatusBadge from '@/components/StatusBadge'
 import { format, parseISO, differenceInDays, isToday, isPast } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-
-function LembreteModal({ visita, onClose }: { visita: Visita; onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl p-6 text-center">
-        <CheckCircle2 size={48} className="text-green-500 mx-auto mb-4" />
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">Visita salva com sucesso!</h3>
-        {visita.data_followup && (
-          <p className="text-sm text-gray-600 mb-4">
-            Lembrete: follow-up agendado para{' '}
-            <strong>{format(parseISO(visita.data_followup), 'dd/MM/yyyy')}</strong>.
-          </p>
-        )}
-        <button
-          onClick={onClose}
-          className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
-        >
-          OK
-        </button>
-      </div>
-    </div>
-  )
-}
 
 function VisitaModal({ onClose, onSave, clientes }: {
   onClose: () => void
@@ -38,6 +15,10 @@ function VisitaModal({ onClose, onSave, clientes }: {
 }) {
   const [form, setForm] = useState<Partial<Visita>>({ tipo: 'presencial', status: 'agendada' })
   const [saving, setSaving] = useState(false)
+  const [showLembrete, setShowLembrete] = useState(false)
+const [lembreteTexto, setLembreteTexto] = useState('')
+const [lembreteData, setLembreteData] = useState('')
+const [visitaSalvaId, setVisitaSalvaId] = useState<string | null>(null)
 
   function set(k: keyof Visita, v: string) {
     setForm(f => ({ ...f, [k]: v }))
@@ -46,11 +27,70 @@ function VisitaModal({ onClose, onSave, clientes }: {
   async function handleSave() {
     if (!form.cliente_id || !form.data_visita) return
     setSaving(true)
-    await onSave(form)
-    setSaving(false)
-    onClose()
+    const visitaSalva = await onSave(form)
+setSaving(false)
+if (visitaSalva?.id) {
+  setVisitaSalvaId(visitaSalva.id)
+  setShowLembrete(true)
+} else {
+  onClose()
+}
   }
-
+if (showLembrete) {
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6">
+        <h3 className="text-lg font-semibold mb-2">Criar Lembrete</h3>
+        <p className="text-sm text-gray-500 mb-4">Quer criar um lembrete para este cliente?</p>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">O que precisa fazer?</label>
+            <input
+              type="text"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Ex: Enviar bonificação, Mandar NF..."
+              value={lembreteTexto}
+              onChange={e => setLembreteTexto(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Quando lembrar?</label>
+            <input
+              type="datetime-local"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={lembreteData}
+              onChange={e => setLembreteData(e.target.value)}
+            />
+          </div>
+        </div>
+        <div className="flex gap-3 mt-6">
+          <button
+            onClick={onClose}
+            className="flex-1 border border-gray-300 rounded-lg py-2 text-sm text-gray-600 hover:bg-gray-50"
+          >
+            Pular
+          </button>
+          <button
+            onClick={async () => {
+              if (lembreteTexto && lembreteData && visitaSalvaId) {
+                await createLembrete({
+                  cliente_id: form.cliente_id!,
+                  visita_id: visitaSalvaId,
+                  texto: lembreteTexto,
+                  data_lembrete: lembreteData
+                })
+              }
+              onClose()
+            }}
+            className="flex-1 bg-blue-600 text-white rounded-lg py-2 text-sm hover:bg-blue-700"
+          >
+            Salvar Lembrete
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
@@ -170,7 +210,6 @@ export default function VisitasPage() {
   const [filtro, setFiltro] = useState<'todas' | 'agendada' | 'realizada' | 'cancelada'>('todas')
   const [showModal, setShowModal] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [visitaLembrete, setVisitaLembrete] = useState<Visita | null>(null)
 
   useEffect(() => {
     Promise.all([getVisitas(), getClientes()]).then(([v, c]) => {
@@ -201,7 +240,6 @@ export default function VisitasPage() {
       followup_enviado: false,
     })
     setVisitas(prev => [{ ...nova, clientes: cliente }, ...prev])
-    setVisitaLembrete(nova)
     return nova
   }
 
@@ -344,9 +382,6 @@ export default function VisitasPage() {
           onSave={salvar}
           clientes={clientes}
         />
-      )}
-      {visitaLembrete && (
-        <LembreteModal visita={visitaLembrete} onClose={() => setVisitaLembrete(null)} />
       )}
     </div>
   )

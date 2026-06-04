@@ -10,7 +10,7 @@ const segmentos = [
   'Construção Civil', 'Metalurgia', 'Agronegócio', 'Química', 'Mineração',
   'Logística', 'Alimentício', 'Saúde', 'Serviços', 'Outro',
 ]
-const estados = ['SP', 'RJ', 'MG', 'RS', 'PR', 'SC', 'BA', 'GO', 'DF', 'ES', 'CE', 'PE', 'MT', 'MS', 'PA', 'AM']
+onSave: (c: Partial<Cliente>) => void
 
 function ClienteModal({ onClose, onSave }: {
   onClose: () => void
@@ -336,7 +336,7 @@ export default function ClientesPage() {
             <div className="flex items-start justify-between mb-3">
               <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
                 <span className="text-blue-700 font-bold text-sm">
-                  {c.nome.charAt(0)}{c.empresa.charAt(0)}
+                  {(c.nome || '?').charAt(0)}{(c.empresa || '').charAt(0)}
                 </span>
               </div>
               <div className="flex items-center gap-2">

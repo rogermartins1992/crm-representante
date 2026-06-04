@@ -162,3 +162,36 @@ export async function getVendasMes(mes: number, ano: number): Promise<number> {
   if (error) throw new Error(`[${error.code}] ${error.message}${error.details ? ' — ' + error.details : ''}`)
   return (data ?? []).reduce((s, p) => s + p.valor_total, 0)
 }
+// LEMBRETES
+export async function getLembretes() {
+  const { data, error } = await supabase
+    .from('lembretes')
+    .select('*, clientes(nome, empresa)')
+    .eq('concluido', false)
+    .order('data_lembrete', { ascending: true })
+  if (error) throw error
+  return data
+}
+
+export async function createLembrete(lembrete: {
+  cliente_id: string
+  visita_id?: string
+  texto: string
+  data_lembrete: string
+}) {
+  const { data, error } = await supabase
+    .from('lembretes')
+    .insert([lembrete])
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function concluirLembrete(id: string) {
+  const { error } = await supabase
+    .from('lembretes')
+    .update({ concluido: true })
+    .eq('id', id)
+  if (error) throw error
+}
