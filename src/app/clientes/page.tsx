@@ -160,8 +160,8 @@ export default function ClientesPage() {
   }, [])
 
   const filtrados = clientes.filter(c =>
-    c.nome.toLowerCase().includes(busca.toLowerCase()) ||
-    c.empresa.toLowerCase().includes(busca.toLowerCase()) ||
+    (c.nome || '').toLowerCase().includes(busca.toLowerCase()) ||
+    (c.empresa || '').toLowerCase().includes(busca.toLowerCase()) ||
     (c.segmento || '').toLowerCase().includes(busca.toLowerCase()) ||
     (c.cidade || '').toLowerCase().includes(busca.toLowerCase())
   )

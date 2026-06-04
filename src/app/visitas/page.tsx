@@ -8,9 +8,32 @@ import StatusBadge from '@/components/StatusBadge'
 import { format, parseISO, differenceInDays, isToday, isPast } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
+function LembreteModal({ visita, onClose }: { visita: Visita; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl p-6 text-center">
+        <CheckCircle2 size={48} className="text-green-500 mx-auto mb-4" />
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">Visita salva com sucesso!</h3>
+        {visita.data_followup && (
+          <p className="text-sm text-gray-600 mb-4">
+            Lembrete: follow-up agendado para{' '}
+            <strong>{format(parseISO(visita.data_followup), 'dd/MM/yyyy')}</strong>.
+          </p>
+        )}
+        <button
+          onClick={onClose}
+          className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+        >
+          OK
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function VisitaModal({ onClose, onSave, clientes }: {
   onClose: () => void
-  onSave: (v: Partial<Visita>) => void
+  onSave: (v: Partial<Visita>) => Promise<Visita>
   clientes: Cliente[]
 }) {
   const [form, setForm] = useState<Partial<Visita>>({ tipo: 'presencial', status: 'agendada' })
@@ -147,6 +170,7 @@ export default function VisitasPage() {
   const [filtro, setFiltro] = useState<'todas' | 'agendada' | 'realizada' | 'cancelada'>('todas')
   const [showModal, setShowModal] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [visitaLembrete, setVisitaLembrete] = useState<Visita | null>(null)
 
   useEffect(() => {
     Promise.all([getVisitas(), getClientes()]).then(([v, c]) => {
@@ -162,7 +186,7 @@ export default function VisitasPage() {
     .filter(v => filtro === 'todas' || v.status === filtro)
     .sort((a, b) => b.data_visita.localeCompare(a.data_visita))
 
-  async function salvar(form: Partial<Visita>) {
+  async function salvar(form: Partial<Visita>): Promise<Visita> {
     const cliente = clientes.find(c => c.id === form.cliente_id)
     const nova = await createVisita({
       cliente_id: form.cliente_id!,
@@ -177,6 +201,8 @@ export default function VisitasPage() {
       followup_enviado: false,
     })
     setVisitas(prev => [{ ...nova, clientes: cliente }, ...prev])
+    setVisitaLembrete(nova)
+    return nova
   }
 
   async function marcarRealizada(id: string) {
@@ -318,6 +344,9 @@ export default function VisitasPage() {
           onSave={salvar}
           clientes={clientes}
         />
+      )}
+      {visitaLembrete && (
+        <LembreteModal visita={visitaLembrete} onClose={() => setVisitaLembrete(null)} />
       )}
     </div>
   )
