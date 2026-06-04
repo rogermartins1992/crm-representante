@@ -10,7 +10,7 @@ const segmentos = [
   'Construção Civil', 'Metalurgia', 'Agronegócio', 'Química', 'Mineração',
   'Logística', 'Alimentício', 'Saúde', 'Serviços', 'Outro',
 ]
-onSave: (c: Partial<Cliente>) => void
+const estados = ['SP', 'RJ', 'MG', 'RS', 'PR', 'SC', 'BA', 'GO', 'DF', 'ES', 'CE', 'PE', 'MT', 'MS', 'PA', 'AM']
 
 function ClienteModal({ onClose, onSave }: {
   onClose: () => void
@@ -198,7 +198,6 @@ export default function ClientesPage() {
     setResultado(null)
 
     try {
-      // Diagnóstico: ver colunas reais da tabela no Supabase
       const { data: amostra, error: errAmostra } = await supabase.from('clientes').select('*').limit(1)
       console.log('[Import] Colunas da tabela clientes:',
         errAmostra ? `ERRO: ${errAmostra.message}` : Object.keys(amostra?.[0] ?? {}).join(', ') || '(tabela vazia — sem linhas para inspecionar)')
