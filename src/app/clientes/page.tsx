@@ -10,7 +10,7 @@ const segmentos = [
   'Construção Civil', 'Metalurgia', 'Agronegócio', 'Química', 'Mineração',
   'Logística', 'Alimentício', 'Saúde', 'Serviços', 'Outro',
 ]
-onSave: (v: Partial<Visita>) => Promise<Visita | null>
+onSave: (c: Partial<Cliente>) => void
 
 function ClienteModal({ onClose, onSave }: {
   onClose: () => void
