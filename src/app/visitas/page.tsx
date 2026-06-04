@@ -109,9 +109,11 @@ function VisitaModal({ onClose, onSave, clientes }: {
               onChange={e => set('cliente_id', e.target.value)}
             >
               <option value="">Selecione o cliente...</option>
-              {clientes.map(c => (
-                <option key={c.id} value={c.id}>{c.empresa} — {c.nome}</option>
-              ))}
+              {[...clientes]
+                .sort((a, b) => (a.empresa || a.nome || '').localeCompare(b.empresa || b.nome || '', 'pt-BR'))
+                .map(c => (
+                  <option key={c.id} value={c.id}>{c.empresa} — {c.nome}</option>
+                ))}
             </select>
           </div>
           <div className="grid grid-cols-2 gap-4">

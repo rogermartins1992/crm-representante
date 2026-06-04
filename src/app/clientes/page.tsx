@@ -159,12 +159,14 @@ export default function ClientesPage() {
     getClientes().then(data => { setClientes(data); setLoading(false) })
   }, [])
 
-  const filtrados = clientes.filter(c =>
-    (c.nome || '').toLowerCase().includes(busca.toLowerCase()) ||
-    (c.empresa || '').toLowerCase().includes(busca.toLowerCase()) ||
-    (c.segmento || '').toLowerCase().includes(busca.toLowerCase()) ||
-    (c.cidade || '').toLowerCase().includes(busca.toLowerCase())
-  )
+  const filtrados = clientes
+    .filter(c =>
+      (c.nome || '').toLowerCase().includes(busca.toLowerCase()) ||
+      (c.empresa || '').toLowerCase().includes(busca.toLowerCase()) ||
+      (c.segmento || '').toLowerCase().includes(busca.toLowerCase()) ||
+      (c.cidade || '').toLowerCase().includes(busca.toLowerCase())
+    )
+    .sort((a, b) => (a.empresa || a.nome || '').localeCompare(b.empresa || b.nome || '', 'pt-BR'))
 
   async function salvar(form: Partial<Cliente>) {
     const novo = await createCliente({

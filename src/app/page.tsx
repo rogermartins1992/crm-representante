@@ -69,7 +69,7 @@ export default function Dashboard() {
     .slice(0, 5)
 
   const lembretesHoje = lembretes.filter(
-    l => l.data_lembrete === format(hoje, 'yyyy-MM-dd')
+    l => isToday(parseISO(l.data_lembrete))
   )
 
   async function concluirItem(id: string) {
