@@ -188,6 +188,12 @@ export default function Dashboard() {
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-sm text-gray-800 truncate">{v.clientes?.empresa}</p>
                     <p className="text-xs text-gray-500 truncate">{v.objetivo}</p>
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <span className="text-xs text-blue-600 font-medium truncate">{v.clientes?.nome}</span>
+                      {v.clientes?.cidade && (
+                        <span className="text-xs text-gray-400 truncate">· {v.clientes.cidade}</span>
+                      )}
+                    </div>
                     <div className="flex gap-1 mt-1 items-center">
                       <StatusBadge status={v.tipo} />
                       {v.hora_visita && <span className="text-xs text-gray-400 ml-1">— {v.hora_visita}</span>}
