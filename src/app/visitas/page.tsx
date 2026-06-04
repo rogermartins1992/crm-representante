@@ -225,7 +225,7 @@ export default function VisitasPage() {
     .filter(v => filtro === 'todas' || v.status === filtro)
     .sort((a, b) => b.data_visita.localeCompare(a.data_visita))
 
-  async function salvar(form: Partial<Visita>) {
+  async function salvar(form: Partial<Visita>): Promise<Visita> {
     const cliente = clientes.find(c => c.id === form.cliente_id)
     const nova = await createVisita({
       cliente_id: form.cliente_id!,
@@ -240,6 +240,7 @@ export default function VisitasPage() {
       followup_enviado: false,
     })
     setVisitas(prev => [{ ...nova, clientes: cliente }, ...prev])
+return nova
   }
 
   async function marcarRealizada(id: string) {
