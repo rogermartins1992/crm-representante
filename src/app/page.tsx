@@ -170,13 +170,21 @@ export default function Dashboard() {
                 href="/visitas"
                 className="flex items-center justify-between bg-white border border-orange-100 rounded-lg px-3 py-2 hover:border-orange-300 transition-colors"
               >
-                <div>
+                <div className="min-w-0 flex-1">
                   <span className="font-medium text-sm text-gray-800">{v.clientes?.empresa}</span>
-                  <p className="text-xs text-gray-500">{v.proximo_passo || v.objetivo}</p>
+                  {v.clientes?.nome && (
+                    <p className="text-xs text-blue-600">{v.clientes.nome}</p>
+                  )}
+                  <p className="text-xs text-gray-500 truncate">{v.proximo_passo || v.objetivo}</p>
                 </div>
-                <span className="text-orange-600 text-xs font-medium">
-                  {formatarData(v.data_followup!)}
-                </span>
+                <div className="text-right shrink-0 ml-3">
+                  <span className="text-orange-600 text-xs font-medium block">
+                    {formatarData(v.data_followup!)}
+                  </span>
+                  {v.hora_visita && (
+                    <span className="text-xs text-gray-400">{v.hora_visita}</span>
+                  )}
+                </div>
               </Link>
             ))}
           </div>
