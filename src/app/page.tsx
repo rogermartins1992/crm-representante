@@ -1,13 +1,21 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Users, CalendarCheck, ShoppingCart, Clock, AlertTriangle } from 'lucide-react'
+import { Users, CalendarCheck, ShoppingCart, Clock, AlertTriangle, Bell } from 'lucide-react'
 import Link from 'next/link'
 import MetaProgress from '@/components/MetaProgress'
 import AlertasFaturamento from '@/components/AlertasFaturamento'
 import StatusBadge from '@/components/StatusBadge'
-import { getClientes, getVisitas, getPedidos, getMeta, getVendasMes } from '@/lib/db'
+import { getClientes, getVisitas, getPedidos, getMeta, getVendasMes, getLembretes, concluirLembrete } from '@/lib/db'
 import type { Cliente, Visita, Pedido, Meta } from '@/lib/supabase'
+
+type Lembrete = {
+  id: string
+  texto: string
+  data_lembrete: string
+  concluido: boolean
+  clientes?: { nome: string; empresa: string } | null
+}
 import { format, parseISO, isToday, isTomorrow, differenceInDays } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
@@ -15,6 +23,7 @@ export default function Dashboard() {
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [visitas, setVisitas] = useState<Visita[]>([])
   const [pedidos, setPedidos] = useState<Pedido[]>([])
+  const [lembretes, setLembretes] = useState<Lembrete[]>([])
   const [meta, setMeta] = useState<Meta | null>(null)
   const [realizado, setRealizado] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -31,13 +40,15 @@ export default function Dashboard() {
       getPedidos(),
       getMeta(mes, ano),
       getVendasMes(mes, ano),
+      getLembretes(),
     ])
-      .then(([c, v, p, m, r]) => {
+      .then(([c, v, p, m, r, l]) => {
         setClientes(c)
         setVisitas(v)
         setPedidos(p)
         setMeta(m)
         setRealizado(r)
+        setLembretes(l as Lembrete[])
       })
       .catch(e => setErro(e.message))
       .finally(() => setLoading(false))
@@ -56,6 +67,15 @@ export default function Dashboard() {
   const pedidosRecentes = pedidos
     .sort((a, b) => b.data_pedido.localeCompare(a.data_pedido))
     .slice(0, 5)
+
+  const lembretesHoje = lembretes.filter(
+    l => l.data_lembrete === format(hoje, 'yyyy-MM-dd')
+  )
+
+  async function concluirItem(id: string) {
+    await concluirLembrete(id)
+    setLembretes(prev => prev.filter(l => l.id !== id))
+  }
 
   function formatarData(d: string) {
     const dt = parseISO(d)
@@ -164,6 +184,37 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Bell size={18} className="text-blue-600" />
+          <h3 className="font-semibold text-gray-800">Lembretes de Hoje</h3>
+        </div>
+        {lembretesHoje.length === 0 ? (
+          <p className="text-gray-400 text-sm text-center py-2">Nenhum lembrete para hoje</p>
+        ) : (
+          <div className="space-y-2">
+            {lembretesHoje.map(l => (
+              <div key={l.id} className="flex items-center justify-between bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
+                <div>
+                  <p className="text-sm text-gray-800">{l.texto}</p>
+                  {l.clientes && (
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {l.clientes.nome || l.clientes.empresa}
+                    </p>
+                  )}
+                </div>
+                <button
+                  onClick={() => concluirItem(l.id)}
+                  className="ml-3 shrink-0 text-xs bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 px-3 py-1 rounded-lg"
+                >
+                  Concluir
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-xl border border-gray-200 p-5">
