@@ -82,6 +82,11 @@ export default function Dashboard() {
     return format(dt, "dd 'de' MMM", { locale: ptBR })
   }
 
+  function formatarDataHora(data: string, hora?: string | null) {
+    const dataStr = format(parseISO(data), "dd/MM", { locale: ptBR })
+    return hora ? `${dataStr} · ${hora}` : dataStr
+  }
+
   const stats = [
     { label: 'Clientes', value: clientes.length, icon: Users, cor: 'bg-blue-500', href: '/clientes' },
     { label: 'Visitas Agendadas', value: visitas.filter(v => v.status === 'agendada').length, icon: CalendarCheck, cor: 'bg-indigo-500', href: '/visitas' },
@@ -171,20 +176,14 @@ export default function Dashboard() {
                 className="flex items-center justify-between bg-white border border-orange-100 rounded-lg px-3 py-2 hover:border-orange-300 transition-colors"
               >
                 <div className="min-w-0 flex-1">
-                  <span className="font-medium text-sm text-gray-800">{v.clientes?.empresa}</span>
-                  {v.clientes?.nome && (
-                    <p className="text-xs text-blue-600">{v.clientes.nome}</p>
-                  )}
                   <p className="text-xs text-gray-500 truncate">{v.proximo_passo || v.objetivo}</p>
+                  <p className="text-xs text-gray-800 font-medium mt-0.5">
+                    {[v.clientes?.empresa, v.clientes?.nome].filter(Boolean).join(' · ') || '—'}
+                  </p>
                 </div>
-                <div className="text-right shrink-0 ml-3">
-                  <span className="text-orange-600 text-xs font-medium block">
-                    {formatarData(v.data_followup!)}
-                  </span>
-                  {v.hora_visita && (
-                    <span className="text-xs text-gray-400">{v.hora_visita}</span>
-                  )}
-                </div>
+                <span className="text-orange-600 text-xs font-medium shrink-0 ml-3">
+                  {formatarDataHora(v.data_followup!, v.hora_visita)}
+                </span>
               </Link>
             ))}
           </div>
@@ -202,13 +201,11 @@ export default function Dashboard() {
           <div className="space-y-2">
             {lembretesHoje.map(l => (
               <div key={l.id} className="flex items-center justify-between bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
-                <div>
+                <div className="min-w-0 flex-1">
                   <p className="text-sm text-gray-800">{l.texto}</p>
-                  {l.clientes && (
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      {l.clientes.nome || l.clientes.empresa}
-                    </p>
-                  )}
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {l.clientes?.nome || l.clientes?.empresa || '—'}
+                  </p>
                 </div>
                 <button
                   onClick={() => concluirItem(l.id)}
