@@ -10,7 +10,7 @@ const segmentos = [
   'Construção Civil', 'Metalurgia', 'Agronegócio', 'Química', 'Mineração',
   'Logística', 'Alimentício', 'Saúde', 'Serviços', 'Outro',
 ]
-const estados = ['SP', 'RJ', 'MG', 'RS', 'PR', 'SC', 'BA', 'GO', 'DF', 'ES', 'CE', 'PE', 'MT', 'MS', 'PA', 'AM']
+onSave: (v: Partial<Visita>) => Promise<Visita | null>
 
 function ClienteModal({ onClose, onSave }: {
   onClose: () => void
@@ -160,10 +160,10 @@ export default function ClientesPage() {
   }, [])
 
   const filtrados = clientes.filter(c =>
-    c.nome.toLowerCase().includes(busca.toLowerCase()) ||
-    c.empresa.toLowerCase().includes(busca.toLowerCase()) ||
-    (c.segmento || '').toLowerCase().includes(busca.toLowerCase()) ||
-    (c.cidade || '').toLowerCase().includes(busca.toLowerCase())
+(c.nome || '').toLowerCase().includes(busca.toLowerCase()) ||
+(c.empresa || '').toLowerCase().includes(busca.toLowerCase()) ||
+(c.segmento || '').toLowerCase().includes(busca.toLowerCase()) ||
+(c.cidade || '').toLowerCase().includes(busca.toLowerCase())
   )
 
   async function salvar(form: Partial<Cliente>) {
