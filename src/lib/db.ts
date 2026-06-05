@@ -44,18 +44,21 @@ export async function deleteCliente(id: string): Promise<void> {
 export async function getVisitas(): Promise<Visita[]> {
   const { data, error } = await supabase
     .from('visitas')
-    .select('*, clientes(*)')
+    .select('*')
     .order('data_visita', { ascending: false })
   if (error) throw new Error(`[${error.code}] ${error.message}${error.details ? ' — ' + error.details : ''}`)
 
-  const raw = (data ?? []) as (Omit<Visita, 'clientes'> & { clientes: Cliente | Cliente[] | null })[]
-  console.log('[getVisitas] primeiro resultado (raw):', JSON.stringify(raw[0] ?? null))
+  const visitas = (data ?? []) as Omit<Visita, 'clientes'>[]
+  const ids = [...new Set(visitas.map(v => v.cliente_id).filter(Boolean))]
 
-  // PostgREST pode retornar clientes como array (relação invertida) ou objeto (N:1)
-  return raw.map(v => ({
-    ...v,
-    clientes: (Array.isArray(v.clientes) ? v.clientes[0] : v.clientes) ?? undefined,
-  }))
+  let clientesMap: Record<string, Cliente> = {}
+  if (ids.length > 0) {
+    const { data: cd, error: ce } = await supabase.from('clientes').select('*').in('id', ids)
+    if (ce) throw new Error(`[${ce.code}] ${ce.message}`)
+    clientesMap = Object.fromEntries((cd ?? []).map(c => [c.id, c]))
+  }
+
+  return visitas.map(v => ({ ...v, clientes: clientesMap[v.cliente_id] ?? undefined }))
 }
 
 export async function createVisita(
@@ -174,11 +177,22 @@ export async function getVendasMes(mes: number, ano: number): Promise<number> {
 export async function getLembretes() {
   const { data, error } = await supabase
     .from('lembretes')
-    .select('*, clientes(nome, empresa)')
+    .select('*')
     .eq('concluido', false)
     .order('data_lembrete', { ascending: true })
   if (error) throw error
-  return data
+
+  const lembretes = data ?? []
+  const ids = [...new Set(lembretes.map(l => l.cliente_id).filter(Boolean))]
+
+  let clientesMap: Record<string, { nome: string; empresa: string }> = {}
+  if (ids.length > 0) {
+    const { data: cd, error: ce } = await supabase.from('clientes').select('id, nome, empresa').in('id', ids)
+    if (ce) throw ce
+    clientesMap = Object.fromEntries((cd ?? []).map(c => [c.id, { nome: c.nome, empresa: c.empresa }]))
+  }
+
+  return lembretes.map(l => ({ ...l, clientes: clientesMap[l.cliente_id] ?? null }))
 }
 
 export async function createLembrete(lembrete: {
