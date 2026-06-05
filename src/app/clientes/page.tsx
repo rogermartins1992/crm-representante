@@ -1,72 +1,272 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Plus, Search, Phone, Mail, Building2, MapPin, Trash2, X, Upload, CheckCircle, AlertCircle } from 'lucide-react'
-import { getClientes, createCliente, deleteCliente } from '@/lib/db'
+import { Plus, Search, Phone, Mail, Building2, MapPin, Trash2, X, Upload, CheckCircle, AlertCircle, Calendar, Bell, Clock } from 'lucide-react'
+import { getClientes, createCliente, deleteCliente, getVisitas, getLembretes, createVisita } from '@/lib/db'
 import { supabase } from '@/lib/supabase'
-import type { Cliente } from '@/lib/supabase'
+import type { Cliente, Visita } from '@/lib/supabase'
+import StatusBadge from '@/components/StatusBadge'
+import { format, parseISO } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
 
-function ClienteDetalheModal({ cliente, onClose }: { cliente: Cliente; onClose: () => void }) {
+type Lembrete = {
+  id: string
+  cliente_id: string
+  texto: string
+  data_lembrete: string
+  concluido: boolean
+  clientes?: { id: string; nome: string; empresa: string } | null
+}
+
+function NovaVisitaModal({ cliente, onClose, onSaved }: {
+  cliente: Cliente
+  onClose: () => void
+  onSaved: (v: Visita) => void
+}) {
+  const [form, setForm] = useState<Partial<Visita>>({
+    cliente_id: cliente.id,
+    tipo: 'presencial',
+    status: 'agendada',
+  })
+  const [saving, setSaving] = useState(false)
+
+  function set(k: keyof Visita, v: string) {
+    setForm(f => ({ ...f, [k]: v }))
+  }
+
+  async function handleSave() {
+    if (!form.data_visita) return
+    setSaving(true)
+    try {
+      const nova = await createVisita({
+        cliente_id: cliente.id,
+        data_visita: form.data_visita!,
+        hora_visita: form.hora_visita,
+        tipo: (form.tipo as Visita['tipo']) || 'presencial',
+        status: (form.status as Visita['status']) || 'agendada',
+        objetivo: form.objetivo,
+        resultado: form.resultado,
+        proximo_passo: form.proximo_passo,
+        data_followup: form.data_followup,
+        followup_enviado: false,
+      })
+      onSaved(nova)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
         <div className="p-6 border-b border-gray-100 flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">{cliente.empresa || cliente.nome}</h3>
-            {cliente.segmento && (
-              <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">{cliente.segmento}</span>
-            )}
-          </div>
+          <h3 className="text-lg font-semibold">Nova Visita — {cliente.nome || cliente.empresa}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
         </div>
-        <div className="p-6 space-y-3">
-          {cliente.nome && (
+        <div className="p-6 space-y-4">
+          <div className="grid grid-cols-2 gap-4">
             <div>
-              <p className="text-xs text-gray-400 uppercase tracking-wide mb-0.5">Contato</p>
-              <p className="font-medium text-gray-900">{cliente.nome}</p>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Data *</label>
+              <input type="date" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={form.data_visita || ''} onChange={e => set('data_visita', e.target.value)} />
             </div>
-          )}
-          {cliente.empresa && cliente.nome && (
             <div>
-              <p className="text-xs text-gray-400 uppercase tracking-wide mb-0.5">Empresa</p>
-              <p className="text-gray-700 flex items-center gap-1.5">
-                <Building2 size={14} className="text-gray-400 shrink-0" />{cliente.empresa}
-              </p>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Hora</label>
+              <input type="time" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={form.hora_visita || ''} onChange={e => set('hora_visita', e.target.value)} />
             </div>
-          )}
-          {cliente.cnpj && <p className="text-sm text-gray-500">{cliente.cnpj}</p>}
-          <div className="space-y-2 pt-1">
-            {cliente.telefone && (
-              <a href={`tel:${cliente.telefone}`} className="text-sm text-blue-600 flex items-center gap-1.5 hover:underline">
-                <Phone size={14} />{cliente.telefone}
-              </a>
-            )}
-            {cliente.email && (
-              <a href={`mailto:${cliente.email}`} className="text-sm text-blue-600 flex items-center gap-1.5 hover:underline truncate">
-                <Mail size={14} className="shrink-0" />{cliente.email}
-              </a>
-            )}
-            {(cliente.cidade || cliente.estado) && (
-              <p className="text-sm text-gray-600 flex items-center gap-1.5">
-                <MapPin size={14} className="text-gray-400" />
-                {[cliente.cidade, cliente.estado].filter(Boolean).join(' — ')}
-              </p>
-            )}
           </div>
-          {cliente.observacoes && (
-            <div className="border-t border-gray-100 pt-3 mt-3">
-              <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Observações</p>
-              <p className="text-sm text-gray-600">{cliente.observacoes}</p>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
+              <select className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={form.tipo || 'presencial'} onChange={e => set('tipo', e.target.value)}>
+                <option value="presencial">Presencial</option>
+                <option value="remota">Remota</option>
+                <option value="telefone">Telefone</option>
+              </select>
             </div>
-          )}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+              <select className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={form.status || 'agendada'} onChange={e => set('status', e.target.value)}>
+                <option value="agendada">Agendada</option>
+                <option value="realizada">Realizada</option>
+                <option value="cancelada">Cancelada</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Objetivo</label>
+            <textarea rows={2} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              value={form.objetivo || ''} onChange={e => set('objetivo', e.target.value)} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Próximo Passo</label>
+            <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={form.proximo_passo || ''} onChange={e => set('proximo_passo', e.target.value)} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Data do Follow-up</label>
+            <input type="date" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={form.data_followup || ''} onChange={e => set('data_followup', e.target.value)} />
+          </div>
         </div>
-        <div className="p-4 border-t border-gray-100 flex justify-end">
-          <button onClick={onClose} className="px-4 py-2 text-sm border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50">
-            Fechar
+        <div className="p-6 border-t border-gray-100 flex gap-3 justify-end">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg">Cancelar</button>
+          <button onClick={handleSave} disabled={!form.data_visita || saving}
+            className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+            {saving ? 'Salvando...' : 'Salvar Visita'}
           </button>
         </div>
       </div>
     </div>
+  )
+}
+
+function ClienteDetalheModal({ cliente, onClose }: { cliente: Cliente; onClose: () => void }) {
+  const [visitas, setVisitas] = useState<Visita[]>([])
+  const [lembretes, setLembretes] = useState<Lembrete[]>([])
+  const [loadingExtra, setLoadingExtra] = useState(true)
+  const [showNovaVisita, setShowNovaVisita] = useState(false)
+
+  useEffect(() => {
+    Promise.all([getVisitas(), getLembretes()]).then(([v, l]) => {
+      setVisitas(
+        v.filter(x => x.cliente_id === cliente.id)
+          .sort((a, b) => b.data_visita.localeCompare(a.data_visita))
+      )
+      setLembretes((l as Lembrete[]).filter(x => x.cliente_id === cliente.id))
+      setLoadingExtra(false)
+    })
+  }, [cliente.id])
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
+          <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">{cliente.nome || cliente.empresa}</h3>
+              {cliente.segmento && (
+                <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">{cliente.segmento}</span>
+              )}
+            </div>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
+          </div>
+
+          <div className="p-6 space-y-4">
+            <div className="space-y-2">
+              {cliente.empresa && cliente.nome && (
+                <p className="text-sm text-gray-700 flex items-center gap-1.5">
+                  <Building2 size={14} className="text-gray-400 shrink-0" />{cliente.empresa}
+                </p>
+              )}
+              {cliente.cnpj && <p className="text-xs text-gray-400 pl-5">{cliente.cnpj}</p>}
+              {cliente.telefone && (
+                <a href={`tel:${cliente.telefone}`} className="text-sm text-blue-600 flex items-center gap-1.5 hover:underline">
+                  <Phone size={14} />{cliente.telefone}
+                </a>
+              )}
+              {cliente.email && (
+                <a href={`mailto:${cliente.email}`} className="text-sm text-blue-600 flex items-center gap-1.5 hover:underline truncate">
+                  <Mail size={14} className="shrink-0" />{cliente.email}
+                </a>
+              )}
+              {(cliente.cidade || cliente.estado) && (
+                <p className="text-sm text-gray-600 flex items-center gap-1.5">
+                  <MapPin size={14} className="text-gray-400" />
+                  {[cliente.cidade, cliente.estado].filter(Boolean).join(' — ')}
+                </p>
+              )}
+              {cliente.observacoes && (
+                <p className="text-xs text-gray-500 border-t border-gray-100 pt-2 mt-1">{cliente.observacoes}</p>
+              )}
+            </div>
+
+            <div className="border-t border-gray-100 pt-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Bell size={15} className="text-blue-500" />
+                <h4 className="text-sm font-semibold text-gray-700">Lembretes Pendentes</h4>
+              </div>
+              {loadingExtra ? (
+                <p className="text-xs text-gray-400">Carregando...</p>
+              ) : lembretes.length === 0 ? (
+                <p className="text-xs text-gray-400">Nenhum lembrete pendente</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {lembretes.map(l => (
+                    <div key={l.id} className="flex items-start gap-2 bg-blue-50 rounded-lg px-3 py-2">
+                      <Clock size={13} className="text-blue-400 mt-0.5 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-sm text-gray-800">{l.texto}</p>
+                        <p className="text-xs text-gray-500">{format(parseISO(l.data_lembrete), "dd 'de' MMM", { locale: ptBR })}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-gray-100 pt-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Calendar size={15} className="text-indigo-500" />
+                  <h4 className="text-sm font-semibold text-gray-700">Histórico de Visitas</h4>
+                </div>
+                <button
+                  onClick={() => setShowNovaVisita(true)}
+                  className="flex items-center gap-1 text-xs bg-blue-600 text-white px-2.5 py-1.5 rounded-lg hover:bg-blue-700"
+                >
+                  <Plus size={12} />Nova Visita
+                </button>
+              </div>
+              {loadingExtra ? (
+                <p className="text-xs text-gray-400">Carregando...</p>
+              ) : visitas.length === 0 ? (
+                <p className="text-xs text-gray-400">Nenhuma visita registrada</p>
+              ) : (
+                <div className="space-y-2">
+                  {visitas.slice(0, 5).map(v => (
+                    <div key={v.id} className="flex items-start gap-3 bg-gray-50 rounded-lg px-3 py-2">
+                      <div className="text-center min-w-[36px]">
+                        <p className="text-xs text-gray-400">{format(parseISO(v.data_visita), 'MMM', { locale: ptBR }).toUpperCase()}</p>
+                        <p className="text-base font-bold text-indigo-600">{format(parseISO(v.data_visita), 'dd')}</p>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <StatusBadge status={v.status} />
+                          <StatusBadge status={v.tipo} />
+                        </div>
+                        {v.objetivo && <p className="text-xs text-gray-600 mt-1 truncate">{v.objetivo}</p>}
+                        {v.resultado && <p className="text-xs text-green-700 mt-0.5 truncate">✓ {v.resultado}</p>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="p-4 border-t border-gray-100 flex justify-end">
+            <button onClick={onClose} className="px-4 py-2 text-sm border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50">
+              Fechar
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {showNovaVisita && (
+        <NovaVisitaModal
+          cliente={cliente}
+          onClose={() => setShowNovaVisita(false)}
+          onSaved={(nova) => {
+            setVisitas(prev => [nova, ...prev])
+            setShowNovaVisita(false)
+          }}
+        />
+      )}
+    </>
   )
 }
 
@@ -407,7 +607,11 @@ export default function ClientesPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {filtrados.map(c => (
-          <div key={c.id} className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md transition-shadow group">
+          <div
+            key={c.id}
+            className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md transition-shadow group cursor-pointer"
+            onClick={() => setClienteDetalhe(c)}
+          >
             <div className="flex items-start justify-between mb-3">
               <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
                 <span className="text-blue-700 font-bold text-sm">
@@ -419,7 +623,7 @@ export default function ClientesPage() {
                   <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">{c.segmento}</span>
                 )}
                 <button
-                  onClick={() => remover(c.id)}
+                  onClick={e => { e.stopPropagation(); remover(c.id) }}
                   className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-opacity"
                 >
                   <Trash2 size={14} />
@@ -434,13 +638,13 @@ export default function ClientesPage() {
             {c.cnpj && <p className="text-xs text-gray-400 mt-0.5 pl-4">{c.cnpj}</p>}
             <div className="mt-3 space-y-1">
               {c.telefone && (
-                <a href={`tel:${c.telefone}`} className="text-sm text-gray-600 flex items-center gap-1.5 hover:text-blue-600">
+                <a href={`tel:${c.telefone}`} onClick={e => e.stopPropagation()} className="text-sm text-gray-600 flex items-center gap-1.5 hover:text-blue-600">
                   <Phone size={13} className="text-gray-400" />
                   {c.telefone}
                 </a>
               )}
               {c.email && (
-                <a href={`mailto:${c.email}`} className="text-sm text-gray-600 flex items-center gap-1.5 hover:text-blue-600 truncate">
+                <a href={`mailto:${c.email}`} onClick={e => e.stopPropagation()} className="text-sm text-gray-600 flex items-center gap-1.5 hover:text-blue-600 truncate">
                   <Mail size={13} className="text-gray-400 shrink-0" />
                   {c.email}
                 </a>
