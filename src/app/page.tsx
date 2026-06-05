@@ -45,6 +45,7 @@ export default function Dashboard() {
       .then(([c, v, p, m, r, l]) => {
         setClientes(c)
         setVisitas(v)
+        console.log('followups:', JSON.stringify(v.slice(0, 2)))
         setPedidos(p)
         setMeta(m)
         setRealizado(r)
@@ -181,7 +182,7 @@ export default function Dashboard() {
                   <div className="min-w-0 flex-1">
                     <p className="text-xs text-gray-500 truncate">{v.proximo_passo || v.objetivo}</p>
                     <p className="text-xs text-blue-600 font-medium mt-0.5">
-                      {v.clientes?.nome || v.clientes?.empresa || '—'}
+                      {v.clientes?.nome || v.clientes?.empresa || 'Sem cliente'}
                     </p>
                   </div>
                   <span className="text-orange-600 text-xs font-medium shrink-0 ml-3">
