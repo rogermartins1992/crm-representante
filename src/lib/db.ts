@@ -51,14 +51,14 @@ export async function getVisitas(): Promise<Visita[]> {
   const visitas = (data ?? []) as Omit<Visita, 'clientes'>[]
   const ids = [...new Set(visitas.map(v => v.cliente_id).filter(Boolean))]
 
-  let clientesMap: Record<string, Cliente> = {}
+  let clientes: { id: string; nome: string; empresa: string }[] = []
   if (ids.length > 0) {
-    const { data: cd, error: ce } = await supabase.from('clientes').select('*').in('id', ids)
+    const { data: cd, error: ce } = await supabase.from('clientes').select('id, nome, empresa').in('id', ids)
     if (ce) throw new Error(`[${ce.code}] ${ce.message}`)
-    clientesMap = Object.fromEntries((cd ?? []).map(c => [c.id, c]))
+    clientes = cd ?? []
   }
 
-  return visitas.map(v => ({ ...v, clientes: clientesMap[v.cliente_id] ?? undefined }))
+  return visitas.map(v => ({ ...v, clientes: clientes.find(c => c.id === v.cliente_id) as Cliente | undefined }))
 }
 
 export async function createVisita(
@@ -185,14 +185,14 @@ export async function getLembretes() {
   const lembretes = data ?? []
   const ids = [...new Set(lembretes.map(l => l.cliente_id).filter(Boolean))]
 
-  let clientesMap: Record<string, { nome: string; empresa: string }> = {}
+  let clientes: { id: string; nome: string; empresa: string }[] = []
   if (ids.length > 0) {
     const { data: cd, error: ce } = await supabase.from('clientes').select('id, nome, empresa').in('id', ids)
     if (ce) throw ce
-    clientesMap = Object.fromEntries((cd ?? []).map(c => [c.id, { nome: c.nome, empresa: c.empresa }]))
+    clientes = cd ?? []
   }
 
-  return lembretes.map(l => ({ ...l, clientes: clientesMap[l.cliente_id] ?? null }))
+  return lembretes.map(l => ({ ...l, clientes: clientes.find(c => c.id === l.cliente_id) || null }))
 }
 
 export async function createLembrete(lembrete: {

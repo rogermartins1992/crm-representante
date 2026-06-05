@@ -70,7 +70,7 @@ export default function Dashboard() {
     .sort((a, b) => b.data_pedido.localeCompare(a.data_pedido))
     .slice(0, 5)
 
-  const lembretesHoje = lembretes
+  const lembretesHoje = lembretes.filter(l => l.data_lembrete <= format(hoje, 'yyyy-MM-dd'))
 
   async function concluirItem(id: string) {
     await concluirLembrete(id)
