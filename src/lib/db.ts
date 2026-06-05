@@ -47,7 +47,15 @@ export async function getVisitas(): Promise<Visita[]> {
     .select('*, clientes(*)')
     .order('data_visita', { ascending: false })
   if (error) throw new Error(`[${error.code}] ${error.message}${error.details ? ' — ' + error.details : ''}`)
-  return data ?? []
+
+  const raw = (data ?? []) as (Omit<Visita, 'clientes'> & { clientes: Cliente | Cliente[] | null })[]
+  console.log('[getVisitas] primeiro resultado (raw):', JSON.stringify(raw[0] ?? null))
+
+  // PostgREST pode retornar clientes como array (relação invertida) ou objeto (N:1)
+  return raw.map(v => ({
+    ...v,
+    clientes: (Array.isArray(v.clientes) ? v.clientes[0] : v.clientes) ?? undefined,
+  }))
 }
 
 export async function createVisita(
