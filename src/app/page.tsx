@@ -170,23 +170,26 @@ export default function Dashboard() {
             </h3>
           </div>
           <div className="space-y-2">
-            {followupsPendentes.map(v => (
-              <Link
-                key={v.id}
-                href="/visitas"
-                className="flex items-center justify-between bg-white border border-orange-100 rounded-lg px-3 py-2 hover:border-orange-300 transition-colors"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs text-gray-500 truncate">{v.proximo_passo || v.objetivo}</p>
-                  <p className="text-xs text-blue-600 font-medium mt-0.5">
-                    {v.clientes?.nome || v.clientes?.empresa || '—'}
-                  </p>
-                </div>
-                <span className="text-orange-600 text-xs font-medium shrink-0 ml-3">
-                  {formatarDataHora(v.data_followup!, v.hora_visita)}
-                </span>
-              </Link>
-            ))}
+            {followupsPendentes.map(v => {
+              console.log('visita completa:', JSON.stringify(v))
+              return (
+                <Link
+                  key={v.id}
+                  href={`/clientes?id=${v.cliente_id}`}
+                  className="flex items-center justify-between bg-white border border-orange-100 rounded-lg px-3 py-2 hover:border-orange-300 transition-colors"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs text-gray-500 truncate">{v.proximo_passo || v.objetivo}</p>
+                    <p className="text-xs text-blue-600 font-medium mt-0.5">
+                      {v.clientes?.nome || v.clientes?.empresa || '—'}
+                    </p>
+                  </div>
+                  <span className="text-orange-600 text-xs font-medium shrink-0 ml-3">
+                    {formatarDataHora(v.data_followup!, v.hora_visita)}
+                  </span>
+                </Link>
+              )
+            })}
           </div>
         </div>
       )}

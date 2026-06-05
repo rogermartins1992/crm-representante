@@ -6,6 +6,70 @@ import { getClientes, createCliente, deleteCliente } from '@/lib/db'
 import { supabase } from '@/lib/supabase'
 import type { Cliente } from '@/lib/supabase'
 
+function ClienteDetalheModal({ cliente, onClose }: { cliente: Cliente; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
+        <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">{cliente.empresa || cliente.nome}</h3>
+            {cliente.segmento && (
+              <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">{cliente.segmento}</span>
+            )}
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
+        </div>
+        <div className="p-6 space-y-3">
+          {cliente.nome && (
+            <div>
+              <p className="text-xs text-gray-400 uppercase tracking-wide mb-0.5">Contato</p>
+              <p className="font-medium text-gray-900">{cliente.nome}</p>
+            </div>
+          )}
+          {cliente.empresa && cliente.nome && (
+            <div>
+              <p className="text-xs text-gray-400 uppercase tracking-wide mb-0.5">Empresa</p>
+              <p className="text-gray-700 flex items-center gap-1.5">
+                <Building2 size={14} className="text-gray-400 shrink-0" />{cliente.empresa}
+              </p>
+            </div>
+          )}
+          {cliente.cnpj && <p className="text-sm text-gray-500">{cliente.cnpj}</p>}
+          <div className="space-y-2 pt-1">
+            {cliente.telefone && (
+              <a href={`tel:${cliente.telefone}`} className="text-sm text-blue-600 flex items-center gap-1.5 hover:underline">
+                <Phone size={14} />{cliente.telefone}
+              </a>
+            )}
+            {cliente.email && (
+              <a href={`mailto:${cliente.email}`} className="text-sm text-blue-600 flex items-center gap-1.5 hover:underline truncate">
+                <Mail size={14} className="shrink-0" />{cliente.email}
+              </a>
+            )}
+            {(cliente.cidade || cliente.estado) && (
+              <p className="text-sm text-gray-600 flex items-center gap-1.5">
+                <MapPin size={14} className="text-gray-400" />
+                {[cliente.cidade, cliente.estado].filter(Boolean).join(' — ')}
+              </p>
+            )}
+          </div>
+          {cliente.observacoes && (
+            <div className="border-t border-gray-100 pt-3 mt-3">
+              <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Observações</p>
+              <p className="text-sm text-gray-600">{cliente.observacoes}</p>
+            </div>
+          )}
+        </div>
+        <div className="p-4 border-t border-gray-100 flex justify-end">
+          <button onClick={onClose} className="px-4 py-2 text-sm border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50">
+            Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const segmentos = [
   'Construção Civil', 'Metalurgia', 'Agronegócio', 'Química', 'Mineração',
   'Logística', 'Alimentício', 'Saúde', 'Serviços', 'Outro',
@@ -150,6 +214,7 @@ export default function ClientesPage() {
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [busca, setBusca] = useState('')
   const [showModal, setShowModal] = useState(false)
+  const [clienteDetalhe, setClienteDetalhe] = useState<Cliente | null>(null)
   const [loading, setLoading] = useState(true)
   const [importando, setImportando] = useState(false)
   const [resultado, setResultado] = useState<ResultadoImport | null>(null)
@@ -158,6 +223,15 @@ export default function ClientesPage() {
   useEffect(() => {
     getClientes().then(data => { setClientes(data); setLoading(false) })
   }, [])
+
+  useEffect(() => {
+    if (clientes.length === 0) return
+    const params = new URLSearchParams(window.location.search)
+    const id = params.get('id')
+    if (!id) return
+    const found = clientes.find(c => c.id === id)
+    if (found) setClienteDetalhe(found)
+  }, [clientes])
 
   const filtrados = clientes
     .filter(c =>
@@ -395,6 +469,9 @@ export default function ClientesPage() {
       )}
 
       {showModal && <ClienteModal onClose={() => setShowModal(false)} onSave={salvar} />}
+      {clienteDetalhe && (
+        <ClienteDetalheModal cliente={clienteDetalhe} onClose={() => setClienteDetalhe(null)} />
+      )}
     </div>
   )
 }
