@@ -48,6 +48,7 @@ export default function Dashboard() {
         setPedidos(p)
         setMeta(m)
         setRealizado(r)
+        console.log('[Dashboard] lembretes:', l)
         setLembretes(l as Lembrete[])
       })
       .catch(e => setErro(e.message))
@@ -177,8 +178,8 @@ export default function Dashboard() {
               >
                 <div className="min-w-0 flex-1">
                   <p className="text-xs text-gray-500 truncate">{v.proximo_passo || v.objetivo}</p>
-                  <p className="text-xs text-gray-800 font-medium mt-0.5">
-                    {[v.clientes?.empresa, v.clientes?.nome].filter(Boolean).join(' · ') || '—'}
+                  <p className="text-xs text-blue-600 font-medium mt-0.5">
+                    {v.clientes?.nome || v.clientes?.empresa || '—'}
                   </p>
                 </div>
                 <span className="text-orange-600 text-xs font-medium shrink-0 ml-3">
