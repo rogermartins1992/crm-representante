@@ -64,6 +64,15 @@ export type ItemPedido = {
   subtotal: number
 }
 
+export type HistoricoPedido = {
+  id: string
+  pedido_id: string
+  descricao: string
+  status_anterior?: string
+  status_novo?: string
+  created_at: string
+}
+
 export type Meta = {
   id: string
   mes: number

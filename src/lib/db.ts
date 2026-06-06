@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { Cliente, Visita, Pedido, Meta } from './supabase'
+import type { Cliente, Visita, Pedido, Meta, ItemPedido, HistoricoPedido } from './supabase'
 
 // ── Clientes ──────────────────────────────────────────────
 
@@ -108,10 +108,9 @@ export async function updatePedidoStatus(
   id: string,
   status: Pedido['status']
 ): Promise<void> {
-  const { error } = await supabase
-    .from('pedidos')
-    .update({ status, updated_at: new Date().toISOString() })
-    .eq('id', id)
+  const update: Record<string, string> = { status, updated_at: new Date().toISOString() }
+  if (status === 'faturado') update.data_faturamento = new Date().toISOString().split('T')[0]
+  const { error } = await supabase.from('pedidos').update(update).eq('id', id)
   if (error) throw new Error(`[${error.code}] ${error.message}${error.details ? ' — ' + error.details : ''}`)
 }
 
@@ -216,4 +215,48 @@ export async function concluirLembrete(id: string) {
     .update({ concluido: true })
     .eq('id', id)
   if (error) throw error
+}
+
+// ── Itens Pedido ──────────────────────────────────────────
+
+export async function getItensPedido(pedido_id: string): Promise<ItemPedido[]> {
+  const { data, error } = await supabase
+    .from('itens_pedido')
+    .select('*')
+    .eq('pedido_id', pedido_id)
+    .order('id')
+  if (error) throw new Error(`[${error.code}] ${error.message}`)
+  return data ?? []
+}
+
+export async function createItensPedido(
+  items: Omit<ItemPedido, 'id' | 'subtotal'>[]
+): Promise<void> {
+  if (items.length === 0) return
+  const { error } = await supabase.from('itens_pedido').insert(items)
+  if (error) throw new Error(`[${error.code}] ${error.message}`)
+}
+
+// ── Histórico Pedido ──────────────────────────────────────
+
+export async function getHistoricoPedido(pedido_id: string): Promise<HistoricoPedido[]> {
+  const { data, error } = await supabase
+    .from('historico_pedido')
+    .select('*')
+    .eq('pedido_id', pedido_id)
+    .order('created_at', { ascending: false })
+  if (error) throw new Error(`[${error.code}] ${error.message}`)
+  return data ?? []
+}
+
+export async function addHistoricoPedido(
+  pedido_id: string,
+  descricao: string,
+  status_anterior?: string,
+  status_novo?: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from('historico_pedido')
+    .insert({ pedido_id, descricao, status_anterior, status_novo })
+  if (error) throw new Error(`[${error.code}] ${error.message}`)
 }
