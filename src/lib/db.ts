@@ -86,7 +86,7 @@ export async function updateVisita(id: string, v: Partial<Visita>): Promise<void
 export async function getPedidos(): Promise<Pedido[]> {
   const { data, error } = await supabase
     .from('pedidos')
-    .select('*, clientes(*)')
+    .select('*, clientes!left(*)')
     .order('data_pedido', { ascending: false })
   if (error) throw new Error(`[${error.code}] ${error.message}${error.details ? ' — ' + error.details : ''}`)
   return data ?? []
