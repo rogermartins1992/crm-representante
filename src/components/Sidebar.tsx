@@ -11,6 +11,7 @@ import {
   HardHat,
   Menu,
   X,
+  Clock,
 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -18,6 +19,7 @@ const nav = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/clientes', label: 'Clientes', icon: Users },
   { href: '/visitas', label: 'Visitas', icon: CalendarCheck },
+  { href: '/follow-ups', label: 'Follow-ups', icon: Clock },
   { href: '/pedidos', label: 'Pedidos', icon: ShoppingCart },
   { href: '/metas', label: 'Meta Mensal', icon: Target },
 ]

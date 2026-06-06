@@ -68,6 +68,17 @@ create table if not exists metas (
   unique (mes, ano)
 );
 
+create table if not exists lembretes (
+  id uuid default gen_random_uuid() primary key,
+  cliente_id uuid references clientes(id) on delete cascade,
+  visita_id uuid references visitas(id) on delete set null,
+  texto text not null,
+  data_lembrete date not null,
+  hora_lembrete time,
+  concluido boolean default false,
+  created_at timestamptz default now()
+);
+
 -- ── Desabilitar RLS (CRM pessoal, sem autenticação) ──────
 -- Permite que a publishable key leia e grave dados
 
@@ -76,6 +87,7 @@ alter table visitas disable row level security;
 alter table pedidos disable row level security;
 alter table itens_pedido disable row level security;
 alter table metas disable row level security;
+alter table lembretes disable row level security;
 
 -- ── Permissões para a role anon ───────────────────────────
 grant all on clientes to anon;
@@ -83,6 +95,7 @@ grant all on visitas to anon;
 grant all on pedidos to anon;
 grant all on itens_pedido to anon;
 grant all on metas to anon;
+grant all on lembretes to anon;
 
 -- ── Índices ───────────────────────────────────────────────
 create index if not exists idx_visitas_cliente on visitas(cliente_id);
@@ -91,3 +104,9 @@ create index if not exists idx_visitas_followup on visitas(data_followup) where 
 create index if not exists idx_pedidos_cliente on pedidos(cliente_id);
 create index if not exists idx_pedidos_status on pedidos(status);
 create index if not exists idx_pedidos_faturamento on pedidos(data_pedido) where lembrete_faturamento_enviado = false;
+create index if not exists idx_lembretes_cliente on lembretes(cliente_id);
+create index if not exists idx_lembretes_data on lembretes(data_lembrete) where concluido = false;
+
+-- ── Migração: adicionar hora_lembrete se a tabela já existe ──
+-- Execute este bloco se a tabela lembretes já existia antes:
+-- ALTER TABLE lembretes ADD COLUMN IF NOT EXISTS hora_lembrete time;

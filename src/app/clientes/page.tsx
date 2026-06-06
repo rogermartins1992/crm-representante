@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Plus, Search, Phone, Mail, Building2, MapPin, Trash2, X, Upload, CheckCircle, AlertCircle, Calendar, Bell, Clock } from 'lucide-react'
-import { getClientes, createCliente, deleteCliente, getVisitas, getLembretes, createVisita } from '@/lib/db'
+import { Plus, Search, Phone, Mail, Building2, MapPin, Trash2, X, Upload, CheckCircle, AlertCircle, Calendar, Bell, Clock, Pencil, Check } from 'lucide-react'
+import { getClientes, createCliente, deleteCliente, getVisitas, getLembretes, createVisita, updateLembrete, deleteLembrete } from '@/lib/db'
 import { supabase } from '@/lib/supabase'
 import type { Cliente, Visita } from '@/lib/supabase'
 import StatusBadge from '@/components/StatusBadge'
@@ -14,6 +14,7 @@ type Lembrete = {
   cliente_id: string
   texto: string
   data_lembrete: string
+  hora_lembrete?: string | null
   concluido: boolean
   clientes?: { id: string; nome: string; empresa: string } | null
 }
@@ -129,6 +130,9 @@ function ClienteDetalheModal({ cliente, onClose }: { cliente: Cliente; onClose: 
   const [lembretes, setLembretes] = useState<Lembrete[]>([])
   const [loadingExtra, setLoadingExtra] = useState(true)
   const [showNovaVisita, setShowNovaVisita] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState({ texto: '', data_lembrete: '', hora_lembrete: '' })
+  const [savingEdit, setSavingEdit] = useState(false)
 
   useEffect(() => {
     Promise.all([getVisitas(), getLembretes()]).then(([v, l]) => {
@@ -140,6 +144,46 @@ function ClienteDetalheModal({ cliente, onClose }: { cliente: Cliente; onClose: 
       setLoadingExtra(false)
     })
   }, [cliente.id])
+
+  function iniciarEdicao(l: Lembrete) {
+    setEditingId(l.id)
+    setEditForm({
+      texto: l.texto,
+      data_lembrete: l.data_lembrete,
+      hora_lembrete: l.hora_lembrete ? l.hora_lembrete.substring(0, 5) : '',
+    })
+  }
+
+  async function salvarEdicao() {
+    if (!editingId) return
+    setSavingEdit(true)
+    try {
+      await updateLembrete(editingId, {
+        texto: editForm.texto,
+        data_lembrete: editForm.data_lembrete,
+        hora_lembrete: editForm.hora_lembrete || undefined,
+      })
+      setLembretes(prev => prev.map(l =>
+        l.id === editingId
+          ? { ...l, texto: editForm.texto, data_lembrete: editForm.data_lembrete, hora_lembrete: editForm.hora_lembrete || null }
+          : l
+      ))
+      setEditingId(null)
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
+  async function excluirLembrete(id: string) {
+    if (!confirm('Remover este lembrete?')) return
+    await deleteLembrete(id)
+    setLembretes(prev => prev.filter(l => l.id !== id))
+  }
+
+  function formatarHorario(data: string, hora?: string | null) {
+    const dataStr = format(parseISO(data), 'dd/MM', { locale: ptBR })
+    return hora ? `${dataStr} às ${hora.substring(0, 5)}` : dataStr
+  }
 
   return (
     <>
@@ -196,12 +240,69 @@ function ClienteDetalheModal({ cliente, onClose }: { cliente: Cliente; onClose: 
               ) : (
                 <div className="space-y-1.5">
                   {lembretes.map(l => (
-                    <div key={l.id} className="flex items-start gap-2 bg-blue-50 rounded-lg px-3 py-2">
-                      <Clock size={13} className="text-blue-400 mt-0.5 shrink-0" />
-                      <div className="min-w-0">
-                        <p className="text-sm text-gray-800">{l.texto}</p>
-                        <p className="text-xs text-gray-500">{format(parseISO(l.data_lembrete), "dd 'de' MMM", { locale: ptBR })}</p>
-                      </div>
+                    <div key={l.id} className="bg-blue-50 rounded-lg px-3 py-2">
+                      {editingId === l.id ? (
+                        <div className="space-y-2">
+                          <input
+                            className="w-full border border-blue-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
+                            value={editForm.texto}
+                            onChange={e => setEditForm(f => ({ ...f, texto: e.target.value }))}
+                          />
+                          <div className="flex gap-2">
+                            <input
+                              type="date"
+                              className="flex-1 border border-blue-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
+                              value={editForm.data_lembrete}
+                              onChange={e => setEditForm(f => ({ ...f, data_lembrete: e.target.value }))}
+                            />
+                            <input
+                              type="time"
+                              className="w-28 border border-blue-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
+                              value={editForm.hora_lembrete}
+                              onChange={e => setEditForm(f => ({ ...f, hora_lembrete: e.target.value }))}
+                            />
+                          </div>
+                          <div className="flex gap-2 justify-end">
+                            <button
+                              onClick={() => setEditingId(null)}
+                              className="text-xs text-gray-500 px-2 py-1 rounded hover:bg-blue-100"
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              onClick={salvarEdicao}
+                              disabled={savingEdit || !editForm.texto || !editForm.data_lembrete}
+                              className="flex items-center gap-1 text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 disabled:opacity-50"
+                            >
+                              <Check size={11} />{savingEdit ? 'Salvando...' : 'Salvar'}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-start gap-2">
+                          <Clock size={13} className="text-blue-400 mt-0.5 shrink-0" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm text-gray-800">{l.texto}</p>
+                            <p className="text-xs text-gray-500">{formatarHorario(l.data_lembrete, l.hora_lembrete)}</p>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              onClick={() => iniciarEdicao(l)}
+                              className="text-blue-400 hover:text-blue-600 p-1 rounded hover:bg-blue-100"
+                              title="Editar"
+                            >
+                              <Pencil size={12} />
+                            </button>
+                            <button
+                              onClick={() => excluirLembrete(l.id)}
+                              className="text-gray-300 hover:text-red-500 p-1 rounded hover:bg-red-50"
+                              title="Excluir"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

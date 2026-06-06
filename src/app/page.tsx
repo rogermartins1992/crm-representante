@@ -13,6 +13,7 @@ type Lembrete = {
   id: string
   texto: string
   data_lembrete: string
+  hora_lembrete?: string | null
   concluido: boolean
   clientes?: { nome: string; empresa: string } | null
 }
@@ -86,14 +87,14 @@ export default function Dashboard() {
 
   function formatarDataHora(data: string, hora?: string | null) {
     const dataStr = format(parseISO(data), "dd/MM", { locale: ptBR })
-    return hora ? `${dataStr} · ${hora}` : dataStr
+    return hora ? `${dataStr} às ${hora.substring(0, 5)}` : dataStr
   }
 
   const stats = [
     { label: 'Clientes', value: clientes.length, icon: Users, cor: 'bg-blue-500', href: '/clientes' },
     { label: 'Visitas Agendadas', value: visitas.filter(v => v.status === 'agendada').length, icon: CalendarCheck, cor: 'bg-indigo-500', href: '/visitas' },
     { label: 'Pedidos Ativos', value: pedidos.filter(p => !['entregue', 'cancelado'].includes(p.status)).length, icon: ShoppingCart, cor: 'bg-purple-500', href: '/pedidos' },
-    { label: 'Follow-ups Pendentes', value: followupsPendentes.length, icon: Clock, cor: followupsPendentes.length > 0 ? 'bg-orange-500' : 'bg-green-500', href: '/visitas' },
+    { label: 'Follow-ups Pendentes', value: followupsPendentes.length, icon: Clock, cor: followupsPendentes.length > 0 ? 'bg-orange-500' : 'bg-green-500', href: '/follow-ups' },
   ]
 
   if (loading) {
@@ -166,9 +167,9 @@ export default function Dashboard() {
         <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
           <div className="flex items-center gap-2 mb-3">
             <AlertTriangle size={18} className="text-orange-600" />
-            <h3 className="font-semibold text-orange-800">
+            <Link href="/follow-ups" className="font-semibold text-orange-800 hover:underline">
               Follow-ups Pendentes ({followupsPendentes.length})
-            </h3>
+            </Link>
           </div>
           <div className="space-y-2">
             {followupsPendentes.map(v => {
@@ -210,6 +211,9 @@ export default function Dashboard() {
                   <p className="text-sm text-gray-800">{l.texto}</p>
                   <p className="text-xs text-gray-500 mt-0.5">
                     {l.clientes?.nome || l.clientes?.empresa || '—'}
+                    {l.hora_lembrete && (
+                      <span className="ml-1.5 text-blue-500">· {l.hora_lembrete.substring(0, 5)}</span>
+                    )}
                   </p>
                 </div>
                 <button

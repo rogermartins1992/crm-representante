@@ -199,6 +199,7 @@ export async function createLembrete(lembrete: {
   visita_id?: string
   texto: string
   data_lembrete: string
+  hora_lembrete?: string
 }) {
   const { data, error } = await supabase
     .from('lembretes')
@@ -207,6 +208,26 @@ export async function createLembrete(lembrete: {
     .single()
   if (error) throw error
   return data
+}
+
+export async function updateLembrete(id: string, data: {
+  texto?: string
+  data_lembrete?: string
+  hora_lembrete?: string
+}): Promise<void> {
+  const { error } = await supabase
+    .from('lembretes')
+    .update(data)
+    .eq('id', id)
+  if (error) throw error
+}
+
+export async function deleteLembrete(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('lembretes')
+    .delete()
+    .eq('id', id)
+  if (error) throw error
 }
 
 export async function concluirLembrete(id: string) {
