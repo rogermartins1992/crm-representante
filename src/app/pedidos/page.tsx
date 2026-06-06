@@ -51,8 +51,7 @@ function ModalNovoPedido({ onClose, onSave, clientes }: {
   const [observacoes, setObs] = useState('')
   const [items, setItems] = useState<ItemForm[]>([mkItem()])
   const [saving, setSaving] = useState(false)
-
-  const numero = `PED-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`
+  const [numero, setNumero] = useState(`PED-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`)
   const total = items.reduce((s, i) => s + i.quantidade * i.preco_unitario, 0)
   const validItems = items.filter(i => i.produto.trim() && i.preco_unitario > 0)
   const canSave = !!cliente_id && validItems.length > 0
@@ -107,9 +106,9 @@ function ModalNovoPedido({ onClose, onSave, clientes }: {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Número</label>
               <input
-                readOnly
                 value={numero}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-500"
+                onChange={e => setNumero(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <div>
