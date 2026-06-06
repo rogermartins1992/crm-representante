@@ -90,11 +90,26 @@ export default function Dashboard() {
     return hora ? `${dataStr} às ${hora.substring(0, 5)}` : dataStr
   }
 
+  const visitasAgendadas = visitas.filter(v => v.status === 'agendada').length
+  const visitasRealizadas = visitas.filter(v => v.status === 'realizada').length
+  const visitasCanceladas = visitas.filter(v => v.status === 'cancelada').length
+
   const stats = [
-    { label: 'Clientes', value: clientes.length, icon: Users, cor: 'bg-blue-500', href: '/clientes' },
-    { label: 'Visitas Agendadas', value: visitas.filter(v => v.status === 'agendada').length, icon: CalendarCheck, cor: 'bg-indigo-500', href: '/visitas' },
-    { label: 'Pedidos Ativos', value: pedidos.filter(p => !['entregue', 'cancelado'].includes(p.status)).length, icon: ShoppingCart, cor: 'bg-purple-500', href: '/pedidos' },
-    { label: 'Follow-ups Pendentes', value: followupsPendentes.length, icon: Clock, cor: followupsPendentes.length > 0 ? 'bg-orange-500' : 'bg-green-500', href: '/follow-ups' },
+    { label: 'Clientes', value: clientes.length, icon: Users, cor: 'bg-blue-500', href: '/clientes', breakdown: null },
+    {
+      label: 'Visitas',
+      value: visitas.length,
+      icon: CalendarCheck,
+      cor: 'bg-indigo-500',
+      href: '/visitas',
+      breakdown: [
+        { label: 'Agendadas', value: visitasAgendadas, cor: 'text-indigo-600' },
+        { label: 'Realizadas', value: visitasRealizadas, cor: 'text-green-600' },
+        { label: 'Canceladas', value: visitasCanceladas, cor: 'text-red-500' },
+      ],
+    },
+    { label: 'Pedidos Ativos', value: pedidos.filter(p => !['entregue', 'cancelado'].includes(p.status)).length, icon: ShoppingCart, cor: 'bg-purple-500', href: '/pedidos', breakdown: null },
+    { label: 'Follow-ups Pendentes', value: followupsPendentes.length, icon: Clock, cor: followupsPendentes.length > 0 ? 'bg-orange-500' : 'bg-green-500', href: '/follow-ups', breakdown: null },
   ]
 
   if (loading) {
@@ -146,6 +161,16 @@ export default function Dashboard() {
             </div>
             <p className="text-2xl font-bold text-gray-900">{s.value}</p>
             <p className="text-sm text-gray-500 mt-0.5">{s.label}</p>
+            {s.breakdown && (
+              <div className="mt-2 pt-2 border-t border-gray-100 flex gap-3">
+                {s.breakdown.map(b => (
+                  <div key={b.label}>
+                    <p className={`text-sm font-bold ${b.cor}`}>{b.value}</p>
+                    <p className="text-xs text-gray-400">{b.label}</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </Link>
         ))}
       </div>
@@ -172,26 +197,23 @@ export default function Dashboard() {
             </Link>
           </div>
           <div className="space-y-2">
-            {followupsPendentes.map(v => {
-              console.log('visita completa:', JSON.stringify(v))
-              return (
-                <Link
-                  key={v.id}
-                  href={`/clientes?id=${v.cliente_id}`}
-                  className="flex items-center justify-between bg-white border border-orange-100 rounded-lg px-3 py-2 hover:border-orange-300 transition-colors"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs text-gray-500 truncate">{v.proximo_passo || v.objetivo}</p>
-                    <p className="text-xs text-blue-600 font-medium mt-0.5">
-                      {v.clientes?.nome || v.clientes?.empresa || 'Sem cliente'}
-                    </p>
-                  </div>
-                  <span className="text-orange-600 text-xs font-medium shrink-0 ml-3">
-                    {formatarDataHora(v.data_followup!, v.hora_visita)}
-                  </span>
-                </Link>
-              )
-            })}
+            {followupsPendentes.map(v => (
+              <Link
+                key={v.id}
+                href="/follow-ups"
+                className="flex items-center justify-between bg-white border border-orange-100 rounded-lg px-3 py-2 hover:border-orange-300 transition-colors"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-gray-500 truncate">{v.proximo_passo || v.objetivo}</p>
+                  <p className="text-xs text-blue-600 font-medium mt-0.5">
+                    {v.clientes?.nome || v.clientes?.empresa || 'Sem cliente'}
+                  </p>
+                </div>
+                <span className="text-orange-600 text-xs font-medium shrink-0 ml-3">
+                  {formatarDataHora(v.data_followup!, v.hora_visita)}
+                </span>
+              </Link>
+            ))}
           </div>
         </div>
       )}
