@@ -3,26 +3,48 @@
 import { useState, useEffect } from 'react'
 import {
   Plus, ShoppingCart, X, AlertTriangle, Bell, CheckCircle2,
-  Package, Clock, Trash2,
+  Package, Clock, Trash2, Pencil, Save, Truck, FileText,
 } from 'lucide-react'
 import {
   getPedidos, createPedido, updatePedidoStatus, marcarLembreteEnviado,
   getClientes, getItensPedido, createItensPedido,
-  getHistoricoPedido, addHistoricoPedido,
+  getHistoricoPedido, addHistoricoPedido, updatePedido,
 } from '@/lib/db'
 import type { Pedido, Cliente, ItemPedido, HistoricoPedido } from '@/lib/supabase'
 import StatusBadge from '@/components/StatusBadge'
 import { format, parseISO, differenceInDays } from 'date-fns'
 
-const STATUS_FLOW: Pedido['status'][] = ['pendente', 'aprovado', 'em_producao', 'faturado', 'entregue']
+// ─── Status Delta Plus ────────────────────────────────────────────────────────
 
+type StatusDelta = NonNullable<Pedido['status_delta']>
+
+const DELTA_CFG: Record<StatusDelta, { label: string; bg: string; text: string; border: string; dot: string }> = {
+  aguardando: { label: 'Aguardando', bg: 'bg-yellow-100', text: 'text-yellow-700', border: 'border-yellow-300', dot: 'bg-yellow-400' },
+  confirmado:  { label: 'Confirmado', bg: 'bg-green-100',  text: 'text-green-700',  border: 'border-green-300',  dot: 'bg-green-500'  },
+  atrasado:    { label: 'Atrasado',   bg: 'bg-red-100',    text: 'text-red-700',    border: 'border-red-300',    dot: 'bg-red-500'    },
+  faturado:    { label: 'Faturado',   bg: 'bg-blue-100',   text: 'text-blue-700',   border: 'border-blue-300',   dot: 'bg-blue-500'   },
+}
+
+function StatusDeltaBadge({ status }: { status?: StatusDelta | null }) {
+  if (!status) return null
+  const c = DELTA_CFG[status]
+  return (
+    <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full border ${c.bg} ${c.text} ${c.border}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${c.dot}`} />
+      {c.label}
+    </span>
+  )
+}
+
+// ─── Status flow legado ───────────────────────────────────────────────────────
+
+const STATUS_FLOW: Pedido['status'][] = ['pendente', 'aprovado', 'em_producao', 'faturado', 'entregue']
 const STATUS_ACTION: Record<string, string> = {
   pendente: 'Confirmar Pedido',
   aprovado: 'Iniciar Produção',
   em_producao: 'Faturar',
   faturado: 'Marcar Entregue',
 }
-
 const STATUS_HISTORICO: Record<string, string> = {
   aprovado: 'Pedido confirmado',
   em_producao: 'Produção iniciada',
@@ -30,9 +52,147 @@ const STATUS_HISTORICO: Record<string, string> = {
   entregue: 'Pedido entregue',
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
 type ItemForm = { _key: string; produto: string; quantidade: number; preco_unitario: number }
-function mkItem(): ItemForm {
-  return { _key: Math.random().toString(36).slice(2), produto: '', quantidade: 1, preco_unitario: 0 }
+const mkItem = (): ItemForm => ({ _key: Math.random().toString(36).slice(2), produto: '', quantidade: 1, preco_unitario: 0 })
+const fmtDate = (d?: string | null) => (d ? format(parseISO(d), 'dd/MM/yyyy') : '—')
+
+const inputCls = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+const inputSmCls = 'w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+
+// ─── Seção Delta Plus (leitura/edição inline) ─────────────────────────────────
+
+function SecaoDeltaPlus({ pedido, onSave }: {
+  pedido: Pedido
+  onSave: (campos: Partial<Pedido>) => Promise<void>
+}) {
+  const [edit, setEdit] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [form, setForm] = useState({
+    numero_orcamento: pedido.numero_orcamento ?? '',
+    transportadora: pedido.transportadora ?? '',
+    condicao_pagamento: pedido.condicao_pagamento ?? '',
+    status_delta: (pedido.status_delta ?? '') as StatusDelta | '',
+    numero_nf: pedido.numero_nf ?? '',
+    data_faturamento_prevista: pedido.data_faturamento_prevista ?? '',
+    data_faturamento_real: pedido.data_faturamento_real ?? '',
+  })
+
+  function set<K extends keyof typeof form>(k: K, v: typeof form[K]) {
+    setForm(f => ({ ...f, [k]: v }))
+  }
+
+  async function salvar() {
+    setSaving(true)
+    try {
+      await onSave({
+        numero_orcamento: form.numero_orcamento || undefined,
+        transportadora: form.transportadora || undefined,
+        condicao_pagamento: form.condicao_pagamento || undefined,
+        status_delta: (form.status_delta || undefined) as StatusDelta | undefined,
+        numero_nf: form.numero_nf || undefined,
+        data_faturamento_prevista: form.data_faturamento_prevista || undefined,
+        data_faturamento_real: form.data_faturamento_real || undefined,
+      })
+      setEdit(false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="border border-blue-100 bg-blue-50/50 rounded-xl p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h4 className="text-sm font-semibold text-blue-900 flex items-center gap-2">
+          <span className="text-base">△</span> Dados Delta Plus
+        </h4>
+        {!edit ? (
+          <button
+            onClick={() => setEdit(true)}
+            className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium"
+          >
+            <Pencil size={12} /> Editar
+          </button>
+        ) : (
+          <div className="flex gap-2 items-center">
+            <button onClick={() => setEdit(false)} className="text-xs text-gray-500 hover:text-gray-700">Cancelar</button>
+            <button
+              onClick={salvar}
+              disabled={saving}
+              className="flex items-center gap-1 text-xs bg-blue-600 text-white px-2.5 py-1 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              <Save size={11} /> {saving ? 'Salvando...' : 'Salvar'}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {edit ? (
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Nº Orçamento</label>
+            <input className={inputSmCls} value={form.numero_orcamento} onChange={e => set('numero_orcamento', e.target.value)} placeholder="ORC-2026-001" />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Status Delta</label>
+            <select className={inputSmCls} value={form.status_delta} onChange={e => set('status_delta', e.target.value as StatusDelta | '')}>
+              <option value="">— Selecione —</option>
+              <option value="aguardando">🟡 Aguardando</option>
+              <option value="confirmado">🟢 Confirmado</option>
+              <option value="atrasado">🔴 Atrasado</option>
+              <option value="faturado">🔵 Faturado</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Transportadora</label>
+            <input className={inputSmCls} value={form.transportadora} onChange={e => set('transportadora', e.target.value)} placeholder="Ex: Jadlog" />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Condição de Pagamento</label>
+            <input className={inputSmCls} value={form.condicao_pagamento} onChange={e => set('condicao_pagamento', e.target.value)} placeholder="Ex: 30/60 DDL" />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Nº NF</label>
+            <input className={inputSmCls} value={form.numero_nf} onChange={e => set('numero_nf', e.target.value)} placeholder="Ex: 000123" />
+          </div>
+          <div />
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Fat. Previsto</label>
+            <input type="date" className={inputSmCls} value={form.data_faturamento_prevista} onChange={e => set('data_faturamento_prevista', e.target.value)} />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Fat. Real</label>
+            <input type="date" className={inputSmCls} value={form.data_faturamento_real} onChange={e => set('data_faturamento_real', e.target.value)} />
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3">
+          <Row label="Nº Orçamento" value={pedido.numero_orcamento} />
+          <div>
+            <p className="text-xs text-gray-400">Status Delta</p>
+            <div className="mt-0.5"><StatusDeltaBadge status={pedido.status_delta} /></div>
+            {!pedido.status_delta && <p className="text-sm text-gray-500 mt-0.5">—</p>}
+          </div>
+          <Row label="Transportadora" value={pedido.transportadora} />
+          <Row label="Condição de Pagamento" value={pedido.condicao_pagamento} />
+          <Row label="Nº NF" value={pedido.numero_nf} />
+          <div />
+          <Row label="Fat. Previsto" value={fmtDate(pedido.data_faturamento_prevista)} />
+          <Row label="Fat. Real" value={fmtDate(pedido.data_faturamento_real)} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Row({ label, value }: { label: string; value?: string | null }) {
+  return (
+    <div>
+      <p className="text-xs text-gray-400">{label}</p>
+      <p className="text-sm font-medium text-gray-800 mt-0.5">{value || '—'}</p>
+    </div>
+  )
 }
 
 // ─── Modal Novo Pedido ────────────────────────────────────────────────────────
@@ -52,11 +212,20 @@ function ModalNovoPedido({ onClose, onSave, clientes }: {
   const [items, setItems] = useState<ItemForm[]>([mkItem()])
   const [saving, setSaving] = useState(false)
   const [numero, setNumero] = useState(`PED-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`)
+  // Delta Plus
+  const [numero_orcamento, setNumOrc] = useState('')
+  const [transportadora, setTransp] = useState('')
+  const [condicao_pagamento, setCondPag] = useState('')
+  const [status_delta, setStatusDelta] = useState<StatusDelta | ''>('')
+  const [numero_nf, setNumNF] = useState('')
+  const [data_faturamento_prevista, setFatPrev] = useState('')
+  const [data_faturamento_real, setFatReal] = useState('')
+
   const total = items.reduce((s, i) => s + i.quantidade * i.preco_unitario, 0)
   const validItems = items.filter(i => i.produto.trim() && i.preco_unitario > 0)
   const canSave = !!cliente_id && validItems.length > 0
 
-  function updItem(key: string, k: 'produto' | 'quantidade' | 'preco_unitario', v: string | number) {
+  function updItem(key: string, k: keyof Omit<ItemForm, '_key'>, v: string | number) {
     setItems(prev => prev.map(i => i._key === key ? { ...i, [k]: v } : i))
   }
 
@@ -65,15 +234,20 @@ function ModalNovoPedido({ onClose, onSave, clientes }: {
     setSaving(true)
     try {
       await onSave({
-        cliente_id,
-        numero,
-        data_pedido,
+        cliente_id, numero, data_pedido,
         valor_total: total,
         status: 'pendente',
+        lembrete_faturamento_enviado: false,
         data_entrega_prevista: data_entrega_prevista || undefined,
         observacoes: observacoes || undefined,
-        lembrete_faturamento_enviado: false,
-      }, validItems.map(({ _key: _k, ...rest }) => rest))
+        numero_orcamento: numero_orcamento || undefined,
+        transportadora: transportadora || undefined,
+        condicao_pagamento: condicao_pagamento || undefined,
+        status_delta: (status_delta || undefined) as StatusDelta | undefined,
+        numero_nf: numero_nf || undefined,
+        data_faturamento_prevista: data_faturamento_prevista || undefined,
+        data_faturamento_real: data_faturamento_real || undefined,
+      }, validItems.map(({ _key: _, ...rest }) => rest))
       onClose()
     } finally {
       setSaving(false)
@@ -84,19 +258,16 @@ function ModalNovoPedido({ onClose, onSave, clientes }: {
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
         <div className="sticky top-0 bg-white p-6 border-b border-gray-100 flex items-center justify-between z-10">
-          <h3 className="text-lg font-semibold">Novo Pedido</h3>
+          <h3 className="text-lg font-semibold text-gray-900">Novo Pedido</h3>
           <button onClick={onClose}><X size={20} className="text-gray-400 hover:text-gray-600" /></button>
         </div>
 
         <div className="p-6 space-y-5">
+          {/* Campos base */}
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">Cliente *</label>
-              <select
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                value={cliente_id}
-                onChange={e => setClienteId(e.target.value)}
-              >
+              <select className={inputCls} value={cliente_id} onChange={e => setClienteId(e.target.value)}>
                 <option value="">Selecione o cliente...</option>
                 {clientes.map(c => (
                   <option key={c.id} value={c.id}>{c.empresa} — {c.nome}</option>
@@ -104,30 +275,60 @@ function ModalNovoPedido({ onClose, onSave, clientes }: {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Número</label>
-              <input
-                value={numero}
-                onChange={e => setNumero(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Número do Pedido</label>
+              <input className={inputCls} value={numero} onChange={e => setNumero(e.target.value)} />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Data do Pedido *</label>
-              <input
-                type="date"
-                value={data_pedido}
-                onChange={e => setDataPedido(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              <input type="date" className={inputCls} value={data_pedido} onChange={e => setDataPedido(e.target.value)} />
             </div>
             <div className="col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">Entrega Prevista</label>
-              <input
-                type="date"
-                value={data_entrega_prevista}
-                onChange={e => setDataEntrega(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              <input type="date" className={inputCls} value={data_entrega_prevista} onChange={e => setDataEntrega(e.target.value)} />
+            </div>
+          </div>
+
+          {/* Campos Delta Plus */}
+          <div className="border border-blue-100 bg-blue-50/40 rounded-xl p-4 space-y-3">
+            <p className="text-sm font-semibold text-blue-900 flex items-center gap-2">
+              <span className="text-base">△</span> Dados Delta Plus
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Nº Orçamento</label>
+                <input className={inputSmCls} value={numero_orcamento} onChange={e => setNumOrc(e.target.value)} placeholder="ORC-2026-001" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Status Delta</label>
+                <select className={inputSmCls} value={status_delta} onChange={e => setStatusDelta(e.target.value as StatusDelta | '')}>
+                  <option value="">— Selecione —</option>
+                  <option value="aguardando">🟡 Aguardando</option>
+                  <option value="confirmado">🟢 Confirmado</option>
+                  <option value="atrasado">🔴 Atrasado</option>
+                  <option value="faturado">🔵 Faturado</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Transportadora</label>
+                <input className={inputSmCls} value={transportadora} onChange={e => setTransp(e.target.value)} placeholder="Ex: Jadlog" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Condição de Pagamento</label>
+                <input className={inputSmCls} value={condicao_pagamento} onChange={e => setCondPag(e.target.value)} placeholder="Ex: 30/60 DDL" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Nº NF</label>
+                <input className={inputSmCls} value={numero_nf} onChange={e => setNumNF(e.target.value)} placeholder="Ex: 000123" />
+              </div>
+              <div />
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Fat. Previsto</label>
+                <input type="date" className={inputSmCls} value={data_faturamento_prevista} onChange={e => setFatPrev(e.target.value)} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Fat. Real</label>
+                <input type="date" className={inputSmCls} value={data_faturamento_real} onChange={e => setFatReal(e.target.value)} />
+              </div>
             </div>
           </div>
 
@@ -166,8 +367,7 @@ function ModalNovoPedido({ onClose, onSave, clientes }: {
                       </td>
                       <td className="px-3 py-2">
                         <input
-                          type="number"
-                          min={1}
+                          type="number" min={1}
                           className="w-full outline-none text-center text-sm focus:bg-blue-50 rounded px-1 -mx-1 transition-colors"
                           value={it.quantidade}
                           onChange={e => updItem(it._key, 'quantidade', Math.max(1, parseInt(e.target.value) || 1))}
@@ -175,9 +375,7 @@ function ModalNovoPedido({ onClose, onSave, clientes }: {
                       </td>
                       <td className="px-3 py-2">
                         <input
-                          type="number"
-                          min={0}
-                          step="0.01"
+                          type="number" min={0} step="0.01"
                           className="w-full outline-none text-right text-sm focus:bg-blue-50 rounded px-1 -mx-1 transition-colors"
                           placeholder="0,00"
                           value={it.preco_unitario || ''}
@@ -185,9 +383,7 @@ function ModalNovoPedido({ onClose, onSave, clientes }: {
                         />
                       </td>
                       <td className="px-3 py-2 text-right text-gray-600 font-medium">
-                        {(it.quantidade * it.preco_unitario).toLocaleString('pt-BR', {
-                          style: 'currency', currency: 'BRL',
-                        })}
+                        {(it.quantidade * it.preco_unitario).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                       </td>
                       <td className="px-3 py-2 text-center">
                         {items.length > 1 && (
@@ -224,10 +420,7 @@ function ModalNovoPedido({ onClose, onSave, clientes }: {
         </div>
 
         <div className="sticky bottom-0 bg-white p-6 border-t border-gray-100 flex gap-3 justify-end z-10">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
-          >
+          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">
             Cancelar
           </button>
           <button
@@ -243,14 +436,16 @@ function ModalNovoPedido({ onClose, onSave, clientes }: {
   )
 }
 
-// ─── Modal Detalhe do Pedido ──────────────────────────────────────────────────
+// ─── Modal Detalhe ────────────────────────────────────────────────────────────
 
-function ModalDetalhe({ pedido, onClose, onAvancar, onLembrete }: {
+function ModalDetalhe({ pedido: init, onClose, onAvancar, onLembrete, onUpdateDelta }: {
   pedido: Pedido
   onClose: () => void
   onAvancar: (id: string, statusAtual: Pedido['status']) => Promise<void>
   onLembrete: (id: string) => Promise<void>
+  onUpdateDelta: (id: string, campos: Partial<Pedido>) => Promise<void>
 }) {
+  const [pedido, setPedido] = useState(init)
   const [items, setItems] = useState<ItemPedido[]>([])
   const [historico, setHistorico] = useState<HistoricoPedido[]>([])
   const [loading, setLoading] = useState(true)
@@ -280,6 +475,11 @@ function ModalDetalhe({ pedido, onClose, onAvancar, onLembrete }: {
     onClose()
   }
 
+  async function handleSaveDelta(campos: Partial<Pedido>) {
+    await onUpdateDelta(pedido.id, campos)
+    setPedido(p => ({ ...p, ...campos }))
+  }
+
   const itemsTotal = items.reduce((s, i) => s + i.subtotal, 0)
 
   return (
@@ -290,7 +490,11 @@ function ModalDetalhe({ pedido, onClose, onAvancar, onLembrete }: {
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-mono font-bold text-blue-700">{pedido.numero}</span>
+              {pedido.numero_orcamento && (
+                <span className="text-xs text-gray-400 font-mono">ORC: {pedido.numero_orcamento}</span>
+              )}
               <StatusBadge status={pedido.status} />
+              <StatusDeltaBadge status={pedido.status_delta} />
               {alertaFaturamento && (
                 <span className="flex items-center gap-1 text-xs text-orange-600 bg-orange-100 px-2 py-0.5 rounded-full font-medium">
                   <AlertTriangle size={11} /> {dias}d sem faturar
@@ -306,24 +510,18 @@ function ModalDetalhe({ pedido, onClose, onAvancar, onLembrete }: {
         </div>
 
         <div className="p-6 space-y-6">
-          {/* Resumo */}
+          {/* KPIs resumo */}
           <div className="grid grid-cols-3 gap-3">
             <div className="bg-gray-50 rounded-xl p-3 text-center">
               <p className="text-xs text-gray-500">Pedido em</p>
-              <p className="font-semibold text-sm text-gray-800 mt-0.5">
-                {format(parseISO(pedido.data_pedido), 'dd/MM/yyyy')}
-              </p>
+              <p className="font-semibold text-sm text-gray-800 mt-0.5">{fmtDate(pedido.data_pedido)}</p>
             </div>
             <div className="bg-gray-50 rounded-xl p-3 text-center">
               <p className="text-xs text-gray-500">
-                {pedido.data_faturamento ? 'Faturado em' : pedido.data_entrega_prevista ? 'Entrega prev.' : 'Status'}
+                {pedido.data_faturamento_real ? 'Fat. Real' : pedido.data_faturamento_prevista ? 'Fat. Previsto' : 'Entrega Prev.'}
               </p>
               <p className="font-semibold text-sm text-gray-800 mt-0.5">
-                {pedido.data_faturamento
-                  ? format(parseISO(pedido.data_faturamento), 'dd/MM/yyyy')
-                  : pedido.data_entrega_prevista
-                  ? format(parseISO(pedido.data_entrega_prevista), 'dd/MM/yyyy')
-                  : '—'}
+                {fmtDate(pedido.data_faturamento_real || pedido.data_faturamento_prevista || pedido.data_entrega_prevista)}
               </p>
             </div>
             <div className="bg-blue-50 rounded-xl p-3 text-center">
@@ -333,6 +531,9 @@ function ModalDetalhe({ pedido, onClose, onAvancar, onLembrete }: {
               </p>
             </div>
           </div>
+
+          {/* Dados Delta Plus */}
+          <SecaoDeltaPlus pedido={pedido} onSave={handleSaveDelta} />
 
           {/* Itens */}
           <div>
@@ -381,7 +582,6 @@ function ModalDetalhe({ pedido, onClose, onAvancar, onLembrete }: {
             )}
           </div>
 
-          {/* Observações */}
           {pedido.observacoes && (
             <div className="bg-amber-50 border border-amber-100 rounded-lg p-3">
               <p className="text-xs text-amber-600 font-medium mb-1">Observações</p>
@@ -455,12 +655,100 @@ function ModalDetalhe({ pedido, onClose, onAvancar, onLembrete }: {
   )
 }
 
+// ─── Card de Pedido ───────────────────────────────────────────────────────────
+
+function PedidoCard({ p, onClick }: { p: Pedido; onClick: () => void }) {
+  const hoje = new Date()
+  const dias = differenceInDays(hoje, parseISO(p.data_pedido))
+  const alertaFaturamento = ['aprovado', 'em_producao'].includes(p.status) && dias >= 4 && !p.lembrete_faturamento_enviado
+
+  return (
+    <div
+      onClick={onClick}
+      className={`bg-white rounded-xl border p-4 cursor-pointer hover:shadow-md transition-all group
+        ${alertaFaturamento ? 'border-orange-300 bg-orange-50/30' : 'border-gray-200 hover:border-gray-300'}`}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex-1 min-w-0">
+          {/* Badges */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-mono text-sm font-bold text-blue-700">{p.numero}</span>
+            {p.numero_orcamento && (
+              <span className="text-xs text-gray-400 font-mono">ORC: {p.numero_orcamento}</span>
+            )}
+            <StatusBadge status={p.status} />
+            <StatusDeltaBadge status={p.status_delta} />
+            {alertaFaturamento && (
+              <span className="flex items-center gap-1 text-xs text-orange-600 bg-orange-100 px-2 py-0.5 rounded-full font-medium">
+                <AlertTriangle size={11} /> {dias}d sem faturar
+              </span>
+            )}
+            {p.lembrete_faturamento_enviado && !alertaFaturamento && (
+              <span className="flex items-center gap-1 text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
+                <CheckCircle2 size={11} /> Lembrete
+              </span>
+            )}
+          </div>
+
+          {/* Cliente */}
+          <p className="font-semibold text-gray-800 mt-1.5">{p.clientes?.empresa}</p>
+          <p className="text-xs text-gray-500">{p.clientes?.nome}</p>
+
+          {/* Campos Delta inline */}
+          <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-2 text-xs text-gray-500">
+            {p.transportadora && (
+              <span className="flex items-center gap-1">
+                <Truck size={11} className="text-gray-400" /> {p.transportadora}
+              </span>
+            )}
+            {p.condicao_pagamento && (
+              <span>{p.condicao_pagamento}</span>
+            )}
+            {p.numero_nf && (
+              <span className="flex items-center gap-1">
+                <FileText size={11} className="text-gray-400" /> NF {p.numero_nf}
+              </span>
+            )}
+          </div>
+
+          {/* Datas */}
+          <div className="flex flex-wrap gap-3 mt-1.5 text-xs text-gray-400">
+            <span>Pedido: {fmtDate(p.data_pedido)}</span>
+            {p.data_faturamento_prevista && (
+              <span>Fat. prev.: {fmtDate(p.data_faturamento_prevista)}</span>
+            )}
+            {p.data_faturamento_real ? (
+              <span className="text-green-600 font-medium">Fat. real: {fmtDate(p.data_faturamento_real)}</span>
+            ) : p.data_entrega_prevista && !p.data_faturamento_prevista ? (
+              <span>Entrega: {fmtDate(p.data_entrega_prevista)}</span>
+            ) : null}
+          </div>
+
+          {p.observacoes && (
+            <p className="text-xs text-gray-400 mt-1 italic truncate max-w-xs">{p.observacoes}</p>
+          )}
+        </div>
+
+        <div className="shrink-0 text-right">
+          <p className="text-lg font-bold text-gray-900">
+            {p.valor_total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+          </p>
+          <p className="text-xs text-gray-400 mt-1 group-hover:text-blue-500 transition-colors">
+            ver detalhes →
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Página Principal ─────────────────────────────────────────────────────────
 
 export default function PedidosPage() {
   const [pedidos, setPedidos] = useState<Pedido[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
-  const [filtro, setFiltro] = useState('todos')
+  const [filtroStatus, setFiltroStatus] = useState('todos')
+  const [filtroDelta, setFiltroDelta] = useState('todos')
   const [showModal, setShowModal] = useState(false)
   const [pedidoAberto, setPedidoAberto] = useState<Pedido | null>(null)
   const [loading, setLoading] = useState(true)
@@ -473,10 +761,9 @@ export default function PedidosPage() {
     })
   }, [])
 
-  const hoje = new Date()
-
   const filtrados = pedidos
-    .filter(p => filtro === 'todos' || p.status === filtro)
+    .filter(p => filtroStatus === 'todos' || p.status === filtroStatus)
+    .filter(p => filtroDelta === 'todos' || p.status_delta === filtroDelta)
     .sort((a, b) => b.data_pedido.localeCompare(a.data_pedido))
 
   async function salvar(
@@ -488,7 +775,7 @@ export default function PedidosPage() {
     if (itemForms.length > 0) {
       await createItensPedido(itemForms.map(i => ({ pedido_id: novo.id, ...i })))
     }
-    try { await addHistoricoPedido(novo.id, 'Pedido criado') } catch { /* tabela pode não existir ainda */ }
+    try { await addHistoricoPedido(novo.id, 'Pedido criado') } catch { /* tabela pode não existir */ }
     setPedidos(prev => [{ ...novo, clientes: cliente }, ...prev])
   }
 
@@ -500,7 +787,7 @@ export default function PedidosPage() {
     const data_faturamento = next === 'faturado' ? new Date().toISOString().split('T')[0] : undefined
     try {
       await addHistoricoPedido(id, STATUS_HISTORICO[next] ?? `Status: ${next}`, statusAtual, next)
-    } catch { /* tabela pode não existir ainda */ }
+    } catch { /* tabela pode não existir */ }
     setPedidos(prev => prev.map(p =>
       p.id === id ? { ...p, status: next, ...(data_faturamento ? { data_faturamento } : {}) } : p
     ))
@@ -508,11 +795,17 @@ export default function PedidosPage() {
 
   async function lembrete(id: string) {
     await marcarLembreteEnviado(id)
-    try { await addHistoricoPedido(id, 'Lembrete de faturamento enviado') } catch { /* tabela pode não existir ainda */ }
+    try { await addHistoricoPedido(id, 'Lembrete de faturamento enviado') } catch { /* tabela pode não existir */ }
     setPedidos(prev => prev.map(p => p.id === id ? { ...p, lembrete_faturamento_enviado: true } : p))
   }
 
-  const tabs = [
+  async function updateDelta(id: string, campos: Partial<Pedido>) {
+    await updatePedido(id, campos)
+    setPedidos(prev => prev.map(p => p.id === id ? { ...p, ...campos } : p))
+    setPedidoAberto(prev => prev?.id === id ? { ...prev, ...campos } : prev)
+  }
+
+  const tabsStatus = [
     { key: 'todos',       label: 'Todos' },
     { key: 'pendente',    label: 'Ag. Confirmação' },
     { key: 'aprovado',    label: 'Confirmado' },
@@ -520,6 +813,14 @@ export default function PedidosPage() {
     { key: 'faturado',    label: 'Faturado' },
     { key: 'entregue',    label: 'Entregue' },
     { key: 'cancelado',   label: 'Cancelado' },
+  ]
+
+  const tabsDelta = [
+    { key: 'todos',      label: 'Todos',            active: 'bg-gray-800 text-white border-gray-800',       inactive: 'border-gray-200 text-gray-500' },
+    { key: 'aguardando', label: 'Aguardando',        active: 'bg-yellow-100 text-yellow-700 border-yellow-300', inactive: 'border-gray-200 text-gray-500' },
+    { key: 'confirmado', label: 'Confirmado',        active: 'bg-green-100  text-green-700  border-green-300',  inactive: 'border-gray-200 text-gray-500' },
+    { key: 'atrasado',   label: 'Atrasado',          active: 'bg-red-100    text-red-700    border-red-300',    inactive: 'border-gray-200 text-gray-500' },
+    { key: 'faturado',   label: 'Faturado (Delta)',  active: 'bg-blue-100   text-blue-700   border-blue-300',   inactive: 'border-gray-200 text-gray-500' },
   ]
 
   const valorTotal = filtrados.reduce((s, p) => s + p.valor_total, 0)
@@ -533,36 +834,67 @@ export default function PedidosPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
+      {/* Cabeçalho */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Pedidos</h2>
           <p className="text-gray-500 text-sm mt-1">
-            {filtrados.length} pedido{filtrados.length !== 1 ? 's' : ''} · {valorTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+            {filtrados.length} pedido{filtrados.length !== 1 ? 's' : ''} ·{' '}
+            {valorTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
           </p>
         </div>
         <button
           onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium"
+          className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium shadow-sm"
         >
           <Plus size={16} /> Novo Pedido
         </button>
       </div>
 
-      {/* Tabs */}
+      {/* Filtro Status Delta Plus */}
+      <div>
+        <p className="text-xs font-medium text-gray-400 mb-2 flex items-center gap-1.5">
+          <span>△</span> Status Delta Plus
+        </p>
+        <div className="flex gap-2 flex-wrap">
+          {tabsDelta.map(t => {
+            const count = t.key === 'todos'
+              ? pedidos.filter(p => filtroDelta !== 'todos' ? true : true).length
+              : pedidos.filter(p => p.status_delta === t.key).length
+            const isActive = filtroDelta === t.key
+            return (
+              <button
+                key={t.key}
+                onClick={() => setFiltroDelta(t.key)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border transition-all
+                  ${isActive ? t.active : `bg-white ${t.inactive} hover:border-gray-300`}`}
+              >
+                {t.label}
+                <span className={`text-xs rounded-full px-1.5 py-0.5 tabular-nums font-medium
+                  ${isActive ? 'bg-white/30' : 'bg-gray-100 text-gray-500'}`}>
+                  {t.key === 'todos' ? pedidos.length : count}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Filtro Status Pedido */}
       <div className="flex gap-0.5 overflow-x-auto border-b border-gray-200">
-        {tabs.map(t => {
+        {tabsStatus.map(t => {
           const count = t.key === 'todos' ? pedidos.length : pedidos.filter(p => p.status === t.key).length
           return (
             <button
               key={t.key}
-              onClick={() => setFiltro(t.key)}
+              onClick={() => setFiltroStatus(t.key)}
               className={`pb-3 px-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors flex items-center gap-1.5
-                ${filtro === t.key ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                ${filtroStatus === t.key ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
             >
               {t.label}
               <span className={`text-xs rounded-full px-1.5 py-0.5 tabular-nums
-                ${filtro === t.key ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
+                ${filtroStatus === t.key ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
                 {count}
               </span>
             </button>
@@ -572,60 +904,9 @@ export default function PedidosPage() {
 
       {/* Lista */}
       <div className="space-y-3">
-        {filtrados.map(p => {
-          const dias = differenceInDays(hoje, parseISO(p.data_pedido))
-          const alertaFaturamento = ['aprovado', 'em_producao'].includes(p.status) && dias >= 4 && !p.lembrete_faturamento_enviado
-
-          return (
-            <div
-              key={p.id}
-              onClick={() => setPedidoAberto(p)}
-              className={`bg-white rounded-xl border p-4 cursor-pointer hover:shadow-md transition-all group
-                ${alertaFaturamento ? 'border-orange-300 bg-orange-50/30' : 'border-gray-200 hover:border-gray-300'}`}
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-mono text-sm font-bold text-blue-700">{p.numero}</span>
-                    <StatusBadge status={p.status} />
-                    {alertaFaturamento && (
-                      <span className="flex items-center gap-1 text-xs text-orange-600 bg-orange-100 px-2 py-0.5 rounded-full font-medium">
-                        <AlertTriangle size={11} /> {dias}d sem faturar
-                      </span>
-                    )}
-                    {p.lembrete_faturamento_enviado && (
-                      <span className="flex items-center gap-1 text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
-                        <CheckCircle2 size={11} /> Lembrete enviado
-                      </span>
-                    )}
-                  </div>
-                  <p className="font-semibold text-gray-800 mt-1">{p.clientes?.empresa}</p>
-                  <p className="text-xs text-gray-500">{p.clientes?.nome}</p>
-                  <div className="flex flex-wrap gap-4 mt-2 text-xs text-gray-400">
-                    <span>Pedido: {format(parseISO(p.data_pedido), 'dd/MM/yyyy')}</span>
-                    {p.data_entrega_prevista && (
-                      <span>Entrega: {format(parseISO(p.data_entrega_prevista), 'dd/MM/yyyy')}</span>
-                    )}
-                    {p.data_faturamento && (
-                      <span>Faturado: {format(parseISO(p.data_faturamento), 'dd/MM/yyyy')}</span>
-                    )}
-                  </div>
-                  {p.observacoes && (
-                    <p className="text-xs text-gray-400 mt-1 italic truncate max-w-xs">{p.observacoes}</p>
-                  )}
-                </div>
-                <div className="shrink-0 text-right">
-                  <p className="text-lg font-bold text-gray-900">
-                    {p.valor_total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                  </p>
-                  <p className="text-xs text-gray-400 mt-1 group-hover:text-blue-500 transition-colors">
-                    ver detalhes →
-                  </p>
-                </div>
-              </div>
-            </div>
-          )
-        })}
+        {filtrados.map(p => (
+          <PedidoCard key={p.id} p={p} onClick={() => setPedidoAberto(p)} />
+        ))}
         {filtrados.length === 0 && (
           <div className="text-center py-12 text-gray-400">
             <ShoppingCart size={40} className="mx-auto mb-3 opacity-40" />
@@ -647,6 +928,7 @@ export default function PedidosPage() {
           onClose={() => setPedidoAberto(null)}
           onAvancar={avancar}
           onLembrete={lembrete}
+          onUpdateDelta={updateDelta}
         />
       )}
     </div>

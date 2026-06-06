@@ -49,6 +49,16 @@ export type Pedido = {
   data_faturamento?: string
   lembrete_faturamento_enviado: boolean
   observacoes?: string
+  // campos fluxo Delta Plus
+  numero_orcamento?: string
+  transportadora?: string
+  condicao_pagamento?: string
+  status_delta?: 'aguardando' | 'confirmado' | 'atrasado' | 'faturado'
+  numero_nf?: string
+  data_faturamento_prevista?: string
+  data_faturamento_real?: string
+  thread_id_gmail?: string
+  prazo_alerta_horas?: number
   created_at: string
   updated_at: string
   clientes?: Cliente

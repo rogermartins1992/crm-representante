@@ -114,6 +114,14 @@ export async function updatePedidoStatus(
   if (error) throw new Error(`[${error.code}] ${error.message}${error.details ? ' — ' + error.details : ''}`)
 }
 
+export async function updatePedido(id: string, campos: Partial<Pedido>): Promise<void> {
+  const { error } = await supabase
+    .from('pedidos')
+    .update({ ...campos, updated_at: new Date().toISOString() })
+    .eq('id', id)
+  if (error) throw new Error(`[${error.code}] ${error.message}${error.details ? ' — ' + error.details : ''}`)
+}
+
 export async function marcarLembreteEnviado(id: string): Promise<void> {
   const { error } = await supabase
     .from('pedidos')

@@ -46,6 +46,16 @@ create table if not exists pedidos (
   data_faturamento date,
   lembrete_faturamento_enviado boolean default false,
   observacoes text,
+  -- campos fluxo Delta Plus
+  numero_orcamento text,
+  transportadora text,
+  condicao_pagamento text,
+  status_delta text check (status_delta in ('aguardando', 'confirmado', 'atrasado', 'faturado')),
+  numero_nf text,
+  data_faturamento_prevista date,
+  data_faturamento_real date,
+  thread_id_gmail text,
+  prazo_alerta_horas integer default 48,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
