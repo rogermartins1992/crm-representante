@@ -48,8 +48,13 @@ create table if not exists pedidos (
   observacoes text,
   -- campos fluxo Delta Plus
   numero_orcamento text,
+  razao_social text,
+  nome_fantasia text,
+  cnpj text,
   transportadora text,
   condicao_pagamento text,
+  tipo_frete text,
+  data_orcamento date,
   status_delta text check (status_delta in ('aguardando', 'confirmado', 'atrasado', 'faturado')),
   numero_nf text,
   data_faturamento_prevista date,
@@ -120,3 +125,11 @@ create index if not exists idx_lembretes_data on lembretes(data_lembrete) where 
 -- ── Migração: adicionar hora_lembrete se a tabela já existe ──
 -- Execute este bloco se a tabela lembretes já existia antes:
 -- ALTER TABLE lembretes ADD COLUMN IF NOT EXISTS hora_lembrete time;
+
+-- ── Migração: campos de orçamento Delta Plus em pedidos ──────
+-- Execute este bloco se a tabela pedidos já existia antes:
+-- ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS razao_social text;
+-- ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS nome_fantasia text;
+-- ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cnpj text;
+-- ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS tipo_frete text;
+-- ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS data_orcamento date;

@@ -51,8 +51,13 @@ export type Pedido = {
   observacoes?: string
   // campos fluxo Delta Plus
   numero_orcamento?: string
+  razao_social?: string
+  nome_fantasia?: string
+  cnpj?: string
   transportadora?: string
   condicao_pagamento?: string
+  tipo_frete?: string
+  data_orcamento?: string
   status_delta?: 'aguardando' | 'confirmado' | 'atrasado' | 'faturado'
   numero_nf?: string
   data_faturamento_prevista?: string
