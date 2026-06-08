@@ -40,10 +40,19 @@ type DadosOrcamento = {
   data_orcamento: string
 }
 
+const DATA_REGEX = /^\d{4}-\d{2}-\d{2}$/
+
+// O Gemini eventualmente preenche campos não encontrados no PDF com texto
+// como "Não informada"; a coluna data_orcamento é do tipo date no Postgres
+// e rejeitaria esse valor, então normalizamos para null.
+function normalizarDataOrcamento(valor: string): string | null {
+  return DATA_REGEX.test(valor) ? valor : null
+}
+
 async function extrairDadosDoPdf(pdfBase64: string): Promise<DadosOrcamento> {
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? '')
   const model = genAI.getGenerativeModel({
-    model: 'gemini-1.5-flash',
+    model: 'gemini-2.5-flash',
     generationConfig: {
       responseMimeType: 'application/json',
       responseSchema: RESPONSE_SCHEMA,
@@ -116,7 +125,7 @@ export async function POST(request: NextRequest) {
         transportadora: dados.transportadora,
         condicao_pagamento: dados.condicao_pagamento,
         tipo_frete: dados.tipo_frete,
-        data_orcamento: dados.data_orcamento,
+        data_orcamento: normalizarDataOrcamento(dados.data_orcamento),
         status_delta: 'aguardando',
       })
       .select('*, clientes(*)')
