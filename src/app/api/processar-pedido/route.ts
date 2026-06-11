@@ -43,17 +43,29 @@ type DadosOrcamento = {
   data_orcamento: string
 }
 
-async function buscarAnexoGmail(providerToken: string, messageId: string, attachmentId: string): Promise<string> {
+function encontrarPrimeiroPdfId(parts: { mimeType?: string | null; body?: { attachmentId?: string | null } | null; parts?: unknown[] | null }[]): string | null {
+  for (const part of parts) {
+    if (part.mimeType === 'application/pdf' && part.body?.attachmentId) return part.body.attachmentId
+    if (Array.isArray(part.parts)) {
+      const found = encontrarPrimeiroPdfId(part.parts as Parameters<typeof encontrarPrimeiroPdfId>[0])
+      if (found) return found
+    }
+  }
+  return null
+}
+
+async function buscarAnexoGmail(providerToken: string, messageId: string): Promise<string> {
   const oauth2Client = new google.auth.OAuth2()
   oauth2Client.setCredentials({ access_token: providerToken })
 
   const gmail = google.gmail({ version: 'v1', auth: oauth2Client })
-  const res = await gmail.users.messages.attachments.get({
-    userId: 'me',
-    messageId,
-    id: attachmentId,
-  })
 
+  const message = await gmail.users.messages.get({ userId: 'me', id: messageId, format: 'full' })
+  const parts = message.data.payload?.parts ?? []
+  const attachmentId = encontrarPrimeiroPdfId(parts)
+  if (!attachmentId) throw new Error('Nenhum anexo PDF encontrado nessa mensagem.')
+
+  const res = await gmail.users.messages.attachments.get({ userId: 'me', messageId, id: attachmentId })
   const data = res.data.data
   if (!data) throw new Error('Anexo vazio retornado pela Gmail API.')
 
@@ -115,13 +127,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Corpo da requisição precisa ser um JSON válido.' }, { status: 400 })
   }
 
-  const { messageId, attachmentId } = (body ?? {}) as { messageId?: unknown; attachmentId?: unknown }
+  const { messageId } = (body ?? {}) as { messageId?: unknown }
 
   if (typeof messageId !== 'string' || !messageId) {
     return NextResponse.json({ error: 'Campo "messageId" é obrigatório.' }, { status: 400 })
-  }
-  if (typeof attachmentId !== 'string' || !attachmentId) {
-    return NextResponse.json({ error: 'Campo "attachmentId" é obrigatório.' }, { status: 400 })
   }
 
   // Obtém o provider_token do usuário logado via Supabase SSR (cookies)
@@ -151,7 +160,7 @@ export async function POST(request: NextRequest) {
 
   let pdfBase64: string
   try {
-    pdfBase64 = await buscarAnexoGmail(session.provider_token, messageId, attachmentId)
+    pdfBase64 = await buscarAnexoGmail(session.provider_token, messageId)
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Erro ao buscar anexo no Gmail.'
     return NextResponse.json({ error: message }, { status: 502 })
