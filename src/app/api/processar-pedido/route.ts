@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { GoogleGenerativeAI, SchemaType, ObjectSchema } from '@google/generative-ai'
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
+import { google } from 'googleapis'
 import { getSupabaseServer } from '@/lib/supabase-server'
 
 const RESPONSE_SCHEMA: ObjectSchema = {
@@ -38,6 +41,24 @@ type DadosOrcamento = {
   condicao_pagamento: string
   tipo_frete: string
   data_orcamento: string
+}
+
+async function buscarAnexoGmail(providerToken: string, messageId: string, attachmentId: string): Promise<string> {
+  const oauth2Client = new google.auth.OAuth2()
+  oauth2Client.setCredentials({ access_token: providerToken })
+
+  const gmail = google.gmail({ version: 'v1', auth: oauth2Client })
+  const res = await gmail.users.messages.attachments.get({
+    userId: 'me',
+    messageId,
+    id: attachmentId,
+  })
+
+  const data = res.data.data
+  if (!data) throw new Error('Anexo vazio retornado pela Gmail API.')
+
+  // Gmail usa base64 URL-safe (- e _ em vez de + e /); converte para base64 padrão
+  return data.replace(/-/g, '+').replace(/_/g, '/')
 }
 
 async function extrairDadosDoPdf(pdfBase64: string): Promise<DadosOrcamento> {
@@ -94,15 +115,50 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Corpo da requisição precisa ser um JSON válido.' }, { status: 400 })
   }
 
-  const pdfBase64 = (body as { pdf_base64?: unknown } | null)?.pdf_base64
-  if (typeof pdfBase64 !== 'string' || !pdfBase64) {
-    return NextResponse.json({ error: 'Campo "pdf_base64" é obrigatório.' }, { status: 400 })
+  const { messageId, attachmentId } = (body ?? {}) as { messageId?: unknown; attachmentId?: unknown }
+
+  if (typeof messageId !== 'string' || !messageId) {
+    return NextResponse.json({ error: 'Campo "messageId" é obrigatório.' }, { status: 400 })
+  }
+  if (typeof attachmentId !== 'string' || !attachmentId) {
+    return NextResponse.json({ error: 'Campo "attachmentId" é obrigatório.' }, { status: 400 })
   }
 
-  const pdfLimpo = pdfBase64.replace(/[^A-Za-z0-9+/=]/g, '')
+  // Obtém o provider_token do usuário logado via Supabase SSR (cookies)
+  const cookieStore = await cookies()
+  const supabaseSSR = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll()
+        },
+        setAll() {
+          // read-only em route handlers
+        },
+      },
+    }
+  )
+
+  const { data: { session }, error: sessionError } = await supabaseSSR.auth.getSession()
+  if (sessionError || !session?.provider_token) {
+    return NextResponse.json(
+      { error: 'Usuário não autenticado ou token do Gmail indisponível. Faça login novamente.' },
+      { status: 401 }
+    )
+  }
+
+  let pdfBase64: string
+  try {
+    pdfBase64 = await buscarAnexoGmail(session.provider_token, messageId, attachmentId)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Erro ao buscar anexo no Gmail.'
+    return NextResponse.json({ error: message }, { status: 502 })
+  }
 
   try {
-    const dados = await extrairDadosDoPdf(pdfLimpo)
+    const dados = await extrairDadosDoPdf(pdfBase64)
     const clienteId = await buscarOuCriarCliente(dados)
 
     const { data: pedido, error: insertError } = await getSupabaseServer()
