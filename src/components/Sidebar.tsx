@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard,
   Users,
@@ -12,8 +12,10 @@ import {
   Menu,
   X,
   Clock,
+  LogOut,
 } from 'lucide-react'
 import { useState } from 'react'
+import { supabase } from '@/lib/supabase'
 
 const nav = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -26,7 +28,13 @@ const nav = [
 
 export default function Sidebar() {
   const pathname = usePathname()
+  const router = useRouter()
   const [open, setOpen] = useState(false)
+
+  async function handleLogout() {
+    await supabase.auth.signOut()
+    router.push('/login')
+  }
 
   return (
     <>
@@ -82,10 +90,15 @@ export default function Sidebar() {
           })}
         </nav>
 
-        <div className="p-4 border-t border-blue-700">
-          <p className="text-blue-400 text-xs text-center">
-            © 2026 CRM EPI v1.0
-          </p>
+        <div className="p-4 border-t border-blue-700 space-y-3">
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-3 w-full px-4 py-3 rounded-lg text-sm font-medium text-blue-200 hover:bg-blue-800 hover:text-white transition-colors"
+          >
+            <LogOut size={18} />
+            Sair
+          </button>
+          <p className="text-blue-400 text-xs text-center">© 2026 CRM EPI v1.0</p>
         </div>
       </aside>
     </>
