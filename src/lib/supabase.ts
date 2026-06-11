@@ -64,6 +64,7 @@ export type Pedido = {
   data_faturamento_real?: string
   thread_id_gmail?: string
   prazo_alerta_horas?: number
+  data_orcamento?: string
   created_at: string
   updated_at: string
   clientes?: Cliente

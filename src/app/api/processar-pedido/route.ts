@@ -183,7 +183,7 @@ export async function POST(request: NextRequest) {
       throw new Error(`[${insertError.code}] ${insertError.message}${insertError.details ? ' — ' + insertError.details : ''}`)
     }
 
-    return NextResponse.json({ pedido }, { status: 201 })
+    return NextResponse.json({ success: true, pedido_id: pedido.id }, { status: 201 })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Erro desconhecido ao processar o pedido.'
     return NextResponse.json({ error: message }, { status: 500 })

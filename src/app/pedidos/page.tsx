@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import {
   Plus, ShoppingCart, X, AlertTriangle, Bell, CheckCircle2,
-  Package, Clock, Trash2, Pencil, Save, Truck, FileText,
+  Package, Clock, Trash2, Pencil, Save, Truck, FileText, Upload,
 } from 'lucide-react'
 import {
   getPedidos, createPedido, updatePedidoStatus, marcarLembreteEnviado,
@@ -60,6 +60,15 @@ const fmtDate = (d?: string | null) => (d ? format(parseISO(d), 'dd/MM/yyyy') : 
 
 const inputCls = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
 const inputSmCls = 'w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve((reader.result as string).split(',')[1])
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
 
 // ─── Seção Delta Plus (leitura/edição inline) ─────────────────────────────────
 
@@ -511,10 +520,16 @@ function ModalDetalhe({ pedido: init, onClose, onAvancar, onLembrete, onUpdateDe
 
         <div className="p-6 space-y-6">
           {/* KPIs resumo */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <div className="bg-gray-50 rounded-xl p-3 text-center">
-              <p className="text-xs text-gray-500">Pedido em</p>
-              <p className="font-semibold text-sm text-gray-800 mt-0.5">{fmtDate(pedido.data_pedido)}</p>
+              <p className="text-xs text-gray-500">Orçamento</p>
+              <p className="font-semibold text-sm text-gray-800 mt-0.5">{fmtDate(pedido.data_orcamento)}</p>
+            </div>
+            <div className="bg-gray-50 rounded-xl p-3 text-center">
+              <p className="text-xs text-gray-500">Enviado</p>
+              <p className={`font-semibold text-sm mt-0.5 ${pedido.data_pedido ? 'text-gray-800' : 'text-gray-400 italic'}`}>
+                {pedido.data_pedido ? fmtDate(pedido.data_pedido) : '--/--/----'}
+              </p>
             </div>
             <div className="bg-gray-50 rounded-xl p-3 text-center">
               <p className="text-xs text-gray-500">
@@ -655,6 +670,166 @@ function ModalDetalhe({ pedido: init, onClose, onAvancar, onLembrete, onUpdateDe
   )
 }
 
+// ─── Modal Importar PDF ───────────────────────────────────────────────────────
+
+function ModalImportarPDF({ onClose, clientes, onPedidoCriado }: {
+  onClose: () => void
+  clientes: Cliente[]
+  onPedidoCriado: (pedido: Pedido) => void
+}) {
+  const [arquivo, setArquivo] = useState<File | null>(null)
+  const [clienteId, setClienteId] = useState('')
+  const [busca, setBusca] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [erro, setErro] = useState('')
+  const [sucesso, setSucesso] = useState<Pedido | null>(null)
+
+  const clientesOrdenados = [...clientes]
+    .sort((a, b) => (a.empresa || a.nome).localeCompare(b.empresa || b.nome, 'pt-BR'))
+  const clientesFiltrados = busca.trim()
+    ? clientesOrdenados.filter(c => {
+        const termo = busca.toLowerCase()
+        return (
+          (c.empresa || c.nome).toLowerCase().includes(termo) ||
+          (c.cidade ?? '').toLowerCase().includes(termo)
+        )
+      })
+    : clientesOrdenados
+
+  async function processar() {
+    if (!arquivo || !clienteId) return
+    setLoading(true)
+    setErro('')
+    try {
+      const base64 = await fileToBase64(arquivo)
+      const res = await fetch('/api/processar-pedido', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pdf_base64: base64, cliente_id: clienteId }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) throw new Error(data.error || 'Erro ao processar PDF')
+      setSucesso(data.pedido)
+      onPedidoCriado(data.pedido)
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl">
+        <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <Upload size={18} className="text-blue-600" /> Importar PDF Delta Plus
+          </h3>
+          <button onClick={onClose}><X size={20} className="text-gray-400 hover:text-gray-600" /></button>
+        </div>
+
+        {sucesso ? (
+          <div className="p-6 space-y-4">
+            <div className="bg-green-50 border border-green-200 rounded-xl p-5 text-center">
+              <CheckCircle2 size={32} className="text-green-500 mx-auto mb-2" />
+              <p className="font-semibold text-green-800">Pedido criado com sucesso!</p>
+              <p className="text-sm text-green-700 mt-1 font-mono">{sucesso.numero}</p>
+              <p className="text-sm text-green-600 mt-0.5">
+                {sucesso.valor_total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+              </p>
+            </div>
+            <button
+              onClick={onClose}
+              className="w-full py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
+            >
+              Fechar
+            </button>
+          </div>
+        ) : (
+          <div className="p-6 space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Arquivo PDF</label>
+              <label className={`flex flex-col items-center justify-center w-full h-28 border-2 border-dashed rounded-xl cursor-pointer transition-colors
+                ${arquivo ? 'border-blue-400 bg-blue-50' : 'border-gray-300 bg-gray-50 hover:border-blue-400 hover:bg-blue-50/40'}`}>
+                <input
+                  type="file"
+                  accept=".pdf,application/pdf"
+                  className="hidden"
+                  onChange={e => { setArquivo(e.target.files?.[0] ?? null); setErro('') }}
+                />
+                {arquivo ? (
+                  <>
+                    <FileText size={24} className="text-blue-500 mb-1.5" />
+                    <p className="text-sm font-medium text-blue-700 text-center px-4 truncate max-w-full">{arquivo.name}</p>
+                    <p className="text-xs text-blue-400 mt-0.5">{(arquivo.size / 1024).toFixed(0)} KB</p>
+                  </>
+                ) : (
+                  <>
+                    <Upload size={24} className="text-gray-400 mb-1.5" />
+                    <p className="text-sm text-gray-500">Clique para selecionar o PDF</p>
+                    <p className="text-xs text-gray-400 mt-0.5">Orçamento Delta Plus</p>
+                  </>
+                )}
+              </label>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Cliente</label>
+              <input
+                type="text"
+                className={`${inputCls} mb-1.5`}
+                placeholder="Buscar cliente..."
+                value={busca}
+                onChange={e => setBusca(e.target.value)}
+              />
+              <select
+                className={inputCls}
+                value={clienteId}
+                onChange={e => setClienteId(e.target.value)}
+                size={Math.min(clientesFiltrados.length + 1, 6)}
+              >
+                <option value="">— Selecione —</option>
+                {clientesFiltrados.map(c => {
+                  const label = c.empresa || c.nome
+                  return (
+                    <option key={c.id} value={c.id}>
+                      {c.cidade ? `${label} - ${c.cidade}` : label}
+                    </option>
+                  )
+                })}
+              </select>
+            </div>
+
+            {erro && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{erro}</div>
+            )}
+
+            <div className="flex gap-3 pt-1">
+              <button
+                onClick={onClose}
+                className="flex-1 py-2.5 border border-gray-300 text-gray-600 rounded-lg text-sm hover:bg-gray-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={processar}
+                disabled={!arquivo || !clienteId || loading}
+                className="flex-1 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Processando...</>
+                ) : (
+                  <><Upload size={15} /> Importar</>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── Card de Pedido ───────────────────────────────────────────────────────────
 
 function PedidoCard({ p, onClick }: { p: Pedido; onClick: () => void }) {
@@ -713,7 +888,12 @@ function PedidoCard({ p, onClick }: { p: Pedido; onClick: () => void }) {
 
           {/* Datas */}
           <div className="flex flex-wrap gap-3 mt-1.5 text-xs text-gray-400">
-            <span>Pedido: {fmtDate(p.data_pedido)}</span>
+            <span className={p.data_orcamento ? '' : 'italic text-gray-300'}>
+              Orçamento: {p.data_orcamento ? fmtDate(p.data_orcamento) : '--/--/----'}
+            </span>
+            <span className={p.data_pedido ? '' : 'italic text-gray-300'}>
+              Enviado: {p.data_pedido ? fmtDate(p.data_pedido) : '--/--/----'}
+            </span>
             {p.data_faturamento_prevista && (
               <span>Fat. prev.: {fmtDate(p.data_faturamento_prevista)}</span>
             )}
@@ -750,6 +930,7 @@ export default function PedidosPage() {
   const [filtroStatus, setFiltroStatus] = useState('todos')
   const [filtroDelta, setFiltroDelta] = useState('todos')
   const [showModal, setShowModal] = useState(false)
+  const [showModalImportar, setShowModalImportar] = useState(false)
   const [pedidoAberto, setPedidoAberto] = useState<Pedido | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -844,12 +1025,20 @@ export default function PedidosPage() {
             {valorTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
           </p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium shadow-sm"
-        >
-          <Plus size={16} /> Novo Pedido
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowModalImportar(true)}
+            className="flex items-center gap-2 bg-white text-blue-600 border border-blue-300 px-4 py-2 rounded-lg hover:bg-blue-50 text-sm font-medium shadow-sm"
+          >
+            <Upload size={16} /> Importar PDF
+          </button>
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium shadow-sm"
+          >
+            <Plus size={16} /> Novo Pedido
+          </button>
+        </div>
       </div>
 
       {/* Filtro Status Delta Plus */}
@@ -920,6 +1109,13 @@ export default function PedidosPage() {
           onClose={() => setShowModal(false)}
           onSave={salvar}
           clientes={clientes}
+        />
+      )}
+      {showModalImportar && (
+        <ModalImportarPDF
+          onClose={() => setShowModalImportar(false)}
+          clientes={clientes}
+          onPedidoCriado={p => setPedidos(prev => [p, ...prev])}
         />
       )}
       {pedidoAberto && (
