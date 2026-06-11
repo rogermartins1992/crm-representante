@@ -8,7 +8,7 @@ export default function LoginPage() {
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/`,
+        redirectTo: 'https://crm-representante.vercel.app/',
         scopes: 'https://www.googleapis.com/auth/gmail.readonly',
       },
     })
