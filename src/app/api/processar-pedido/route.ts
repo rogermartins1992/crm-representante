@@ -99,10 +99,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Campo "pdf_base64" é obrigatório.' }, { status: 400 })
   }
 
-  const cleanPdfBase64 = pdfBase64.replace(/[^A-Za-z0-9+/=]/g, '')
+  const pdfLimpo = pdfBase64.replace(/[^A-Za-z0-9+/=]/g, '')
 
   try {
-    const dados = await extrairDadosDoPdf(cleanPdfBase64)
+    const dados = await extrairDadosDoPdf(pdfLimpo)
     const clienteId = await buscarOuCriarCliente(dados)
 
     const { data: pedido, error: insertError } = await getSupabaseServer()
