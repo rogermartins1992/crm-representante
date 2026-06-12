@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { GoogleGenerativeAI, SchemaType, ObjectSchema } from '@google/generative-ai'
 import { getSupabaseServer } from '@/lib/supabase-server'
 
+export const maxDuration = 60
+
 const RESPONSE_SCHEMA: ObjectSchema = {
   type: SchemaType.OBJECT,
   properties: {
@@ -128,6 +130,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, pedido_id: pedido.id }, { status: 201 })
   } catch (err) {
+    console.error('[processar-pedido] erro:', err)
     const message = err instanceof Error ? err.message : 'Erro desconhecido ao processar o pedido.'
     return NextResponse.json({ error: message }, { status: 500 })
   }
