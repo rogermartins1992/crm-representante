@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { GoogleGenerativeAI, SchemaType, ObjectSchema } from '@google/generative-ai'
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
-import { google } from 'googleapis'
 import { getSupabaseServer } from '@/lib/supabase-server'
 
 const RESPONSE_SCHEMA: ObjectSchema = {
@@ -41,36 +38,6 @@ type DadosOrcamento = {
   condicao_pagamento: string
   tipo_frete: string
   data_orcamento: string
-}
-
-function encontrarPrimeiroPdfId(parts: { mimeType?: string | null; body?: { attachmentId?: string | null } | null; parts?: unknown[] | null }[]): string | null {
-  for (const part of parts) {
-    if (part.mimeType === 'application/pdf' && part.body?.attachmentId) return part.body.attachmentId
-    if (Array.isArray(part.parts)) {
-      const found = encontrarPrimeiroPdfId(part.parts as Parameters<typeof encontrarPrimeiroPdfId>[0])
-      if (found) return found
-    }
-  }
-  return null
-}
-
-async function buscarAnexoGmail(providerToken: string, messageId: string): Promise<string> {
-  const oauth2Client = new google.auth.OAuth2()
-  oauth2Client.setCredentials({ access_token: providerToken })
-
-  const gmail = google.gmail({ version: 'v1', auth: oauth2Client })
-
-  const message = await gmail.users.messages.get({ userId: 'me', id: messageId, format: 'full' })
-  const parts = message.data.payload?.parts ?? []
-  const attachmentId = encontrarPrimeiroPdfId(parts)
-  if (!attachmentId) throw new Error('Nenhum anexo PDF encontrado nessa mensagem.')
-
-  const res = await gmail.users.messages.attachments.get({ userId: 'me', messageId, id: attachmentId })
-  const data = res.data.data
-  if (!data) throw new Error('Anexo vazio retornado pela Gmail API.')
-
-  // Gmail usa base64 URL-safe (- e _ em vez de + e /); converte para base64 padrão
-  return data.replace(/-/g, '+').replace(/_/g, '/')
 }
 
 async function extrairDadosDoPdf(pdfBase64: string): Promise<DadosOrcamento> {
@@ -127,47 +94,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Corpo da requisição precisa ser um JSON válido.' }, { status: 400 })
   }
 
-  const { messageId } = (body ?? {}) as { messageId?: unknown }
+  const { pdf_base64 } = (body ?? {}) as { pdf_base64?: unknown }
 
-  if (typeof messageId !== 'string' || !messageId) {
-    return NextResponse.json({ error: 'Campo "messageId" é obrigatório.' }, { status: 400 })
-  }
-
-  // Obtém o provider_token do usuário logado via Supabase SSR (cookies)
-  const cookieStore = await cookies()
-  const supabaseSSR = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll()
-        },
-        setAll() {
-          // read-only em route handlers
-        },
-      },
-    }
-  )
-
-  const { data: { session }, error: sessionError } = await supabaseSSR.auth.getSession()
-  if (sessionError || !session?.provider_token) {
-    return NextResponse.json(
-      { error: 'Usuário não autenticado ou token do Gmail indisponível. Faça login novamente.' },
-      { status: 401 }
-    )
-  }
-
-  let pdfBase64: string
-  try {
-    pdfBase64 = await buscarAnexoGmail(session.provider_token, messageId)
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Erro ao buscar anexo no Gmail.'
-    return NextResponse.json({ error: message }, { status: 502 })
+  if (typeof pdf_base64 !== 'string' || !pdf_base64) {
+    return NextResponse.json({ error: 'Campo "pdf_base64" é obrigatório.' }, { status: 400 })
   }
 
   try {
-    const dados = await extrairDadosDoPdf(pdfBase64)
+    const dados = await extrairDadosDoPdf(pdf_base64)
     const clienteId = await buscarOuCriarCliente(dados)
 
     const { data: pedido, error: insertError } = await getSupabaseServer()
@@ -186,7 +120,7 @@ export async function POST(request: NextRequest) {
         data_orcamento: dados.data_orcamento,
         status_delta: 'aguardando',
       })
-      .select('*, clientes(*)')
+      .select('id')
       .single()
     if (insertError) {
       throw new Error(`[${insertError.code}] ${insertError.message}${insertError.details ? ' — ' + insertError.details : ''}`)
