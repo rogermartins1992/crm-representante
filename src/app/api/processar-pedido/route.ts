@@ -89,21 +89,28 @@ async function buscarOuCriarCliente(dados: DadosOrcamento): Promise<string | nul
 }
 
 export async function POST(request: NextRequest) {
-  let body: unknown
+  let pdfBase64: string
+
   try {
-    body = await request.json()
+    const formData = await request.formData()
+    const file = formData.get('attachment')
+
+    if (!file || !(file instanceof File)) {
+      return NextResponse.json({ error: 'Campo "attachment" com arquivo PDF é obrigatório.' }, { status: 400 })
+    }
+
+    if (file.type !== 'application/pdf') {
+      return NextResponse.json({ error: 'O arquivo enviado precisa ser um PDF (application/pdf).' }, { status: 400 })
+    }
+
+    const buffer = Buffer.from(await file.arrayBuffer())
+    pdfBase64 = buffer.toString('base64')
   } catch {
-    return NextResponse.json({ error: 'Corpo da requisição precisa ser um JSON válido.' }, { status: 400 })
-  }
-
-  const { pdf_base64 } = (body ?? {}) as { pdf_base64?: unknown }
-
-  if (typeof pdf_base64 !== 'string' || !pdf_base64) {
-    return NextResponse.json({ error: 'Campo "pdf_base64" é obrigatório.' }, { status: 400 })
+    return NextResponse.json({ error: 'Erro ao processar o arquivo enviado.' }, { status: 400 })
   }
 
   try {
-    const dados = await extrairDadosDoPdf(pdf_base64)
+    const dados = await extrairDadosDoPdf(pdfBase64)
     const clienteId = await buscarOuCriarCliente(dados)
 
     const { data: pedido, error: insertError } = await getSupabaseServer()
