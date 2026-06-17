@@ -1,34 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { GoogleGenerativeAI, SchemaType, ObjectSchema } from '@google/generative-ai'
 import { getSupabaseServer } from '@/lib/supabase-server'
 
 export const maxDuration = 60
-
-const RESPONSE_SCHEMA: ObjectSchema = {
-  type: SchemaType.OBJECT,
-  properties: {
-    numero_orcamento: { type: SchemaType.STRING, description: 'Número do orçamento' },
-    razao_social: { type: SchemaType.STRING, description: 'Razão social do cliente' },
-    nome_fantasia: { type: SchemaType.STRING, description: 'Nome fantasia do cliente' },
-    cnpj: { type: SchemaType.STRING, description: 'CNPJ do cliente, somente dígitos ou formatado' },
-    valor_total: { type: SchemaType.NUMBER, description: 'Valor total do orçamento, em reais' },
-    transportadora: { type: SchemaType.STRING, description: 'Transportadora indicada no orçamento' },
-    condicao_pagamento: { type: SchemaType.STRING, description: 'Condição de pagamento (ex: 30/60 DDL)' },
-    tipo_frete: { type: SchemaType.STRING, description: 'Tipo de frete (ex: CIF, FOB)' },
-    data_orcamento: { type: SchemaType.STRING, description: 'Data do orçamento no formato YYYY-MM-DD' },
-  },
-  required: [
-    'numero_orcamento',
-    'razao_social',
-    'nome_fantasia',
-    'cnpj',
-    'valor_total',
-    'transportadora',
-    'condicao_pagamento',
-    'tipo_frete',
-    'data_orcamento',
-  ],
-}
 
 type DadosOrcamento = {
   numero_orcamento: string
@@ -43,22 +16,55 @@ type DadosOrcamento = {
 }
 
 async function extrairDadosDoPdf(pdfBase64: string): Promise<DadosOrcamento> {
-  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? '')
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-2.0-flash',
-    generationConfig: {
-      responseMimeType: 'application/json',
-      responseSchema: RESPONSE_SCHEMA,
+  const prompt = `Extraia os dados deste orçamento da Delta Plus e retorne um JSON com exatamente estes campos:
+{
+  "numero_orcamento": "Número do orçamento",
+  "razao_social": "Razão social do cliente",
+  "nome_fantasia": "Nome fantasia do cliente",
+  "cnpj": "CNPJ do cliente, somente dígitos ou formatado",
+  "valor_total": 0,
+  "transportadora": "Transportadora indicada no orçamento",
+  "condicao_pagamento": "Condição de pagamento (ex: 30/60 DDL)",
+  "tipo_frete": "Tipo de frete (ex: CIF, FOB)",
+  "data_orcamento": "Data do orçamento no formato YYYY-MM-DD"
+}
+valor_total deve ser um número. Retorne apenas o JSON, sem explicações.`
+
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.OPENROUTER_API_KEY ?? ''}`,
+      'Content-Type': 'application/json',
     },
+    body: JSON.stringify({
+      model: 'google/gemini-2.0-flash-exp:free',
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'file',
+              file: {
+                filename: 'orcamento.pdf',
+                file_data: `data:application/pdf;base64,${pdfBase64}`,
+              },
+            },
+            { type: 'text', text: prompt },
+          ],
+        },
+      ],
+      response_format: { type: 'json_object' },
+    }),
   })
 
-  const result = await model.generateContent([
-    { inlineData: { mimeType: 'application/pdf', data: pdfBase64 } },
-    { text: 'Extraia os dados deste orçamento da Delta Plus conforme o schema fornecido.' },
-  ])
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`OpenRouter error ${response.status}: ${errorText}`)
+  }
 
-  const text = result.response.text()
-  if (!text) throw new Error('O Gemini não retornou os dados extraídos do orçamento.')
+  const json = await response.json()
+  const text: string | undefined = json.choices?.[0]?.message?.content
+  if (!text) throw new Error('O OpenRouter não retornou os dados extraídos do orçamento.')
 
   return JSON.parse(text) as DadosOrcamento
 }
