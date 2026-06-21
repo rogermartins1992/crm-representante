@@ -64,6 +64,11 @@ export type Pedido = {
   data_faturamento_real?: string
   thread_id_gmail?: string
   prazo_alerta_horas?: number
+  // campos captura automática DANFE/NF-e
+  nf_numero?: string
+  nf_chave_acesso?: string
+  nf_data_emissao?: string
+  nf_status?: 'pendente' | 'capturada' | 'erro'
   created_at: string
   updated_at: string
   clientes?: Cliente

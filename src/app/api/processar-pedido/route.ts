@@ -137,13 +137,13 @@ export async function POST(request: NextRequest) {
         data_orcamento: dados.data_orcamento,
         status_delta: 'aguardando',
       })
-      .select('id')
+      .select('*, clientes(*)')
       .single()
     if (insertError) {
       throw new Error(`[${insertError.code}] ${insertError.message}${insertError.details ? ' — ' + insertError.details : ''}`)
     }
 
-    return NextResponse.json({ success: true, pedido_id: pedido.id }, { status: 201 })
+    return NextResponse.json({ success: true, pedido }, { status: 201 })
   } catch (err) {
     console.error('[processar-pedido] erro:', err)
     const message = err instanceof Error ? err.message : 'Erro desconhecido ao processar o pedido.'

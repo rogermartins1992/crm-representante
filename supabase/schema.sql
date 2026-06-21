@@ -61,6 +61,11 @@ create table if not exists pedidos (
   data_faturamento_real date,
   thread_id_gmail text,
   prazo_alerta_horas integer default 48,
+  -- campos captura automática DANFE/NF-e
+  nf_numero text,
+  nf_chave_acesso text,
+  nf_data_emissao timestamptz,
+  nf_status text default 'pendente' check (nf_status in ('pendente', 'capturada', 'erro')),
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
@@ -121,6 +126,8 @@ create index if not exists idx_pedidos_status on pedidos(status);
 create index if not exists idx_pedidos_faturamento on pedidos(data_pedido) where lembrete_faturamento_enviado = false;
 create index if not exists idx_lembretes_cliente on lembretes(cliente_id);
 create index if not exists idx_lembretes_data on lembretes(data_lembrete) where concluido = false;
+create index if not exists idx_pedidos_nf_status on pedidos(nf_status) where nf_status = 'pendente';
+create unique index if not exists idx_pedidos_nf_chave_acesso on pedidos(nf_chave_acesso) where nf_chave_acesso is not null;
 
 -- ── Migração: adicionar hora_lembrete se a tabela já existe ──
 -- Execute este bloco se a tabela lembretes já existia antes:
@@ -133,3 +140,14 @@ create index if not exists idx_lembretes_data on lembretes(data_lembrete) where 
 -- ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cnpj text;
 -- ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS tipo_frete text;
 -- ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS data_orcamento date;
+
+-- ── Migração: captura automática de DANFE/NF-e em pedidos ────
+-- Execute este bloco no SQL Editor do Supabase para tabelas já existentes:
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS nf_numero text;
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS nf_chave_acesso text;
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS nf_data_emissao timestamptz;
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS nf_status text default 'pendente';
+ALTER TABLE pedidos DROP CONSTRAINT IF EXISTS pedidos_nf_status_check;
+ALTER TABLE pedidos ADD CONSTRAINT pedidos_nf_status_check check (nf_status in ('pendente', 'capturada', 'erro'));
+CREATE INDEX IF NOT EXISTS idx_pedidos_nf_status ON pedidos(nf_status) WHERE nf_status = 'pendente';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_pedidos_nf_chave_acesso ON pedidos(nf_chave_acesso) WHERE nf_chave_acesso IS NOT NULL;

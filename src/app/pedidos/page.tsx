@@ -62,15 +62,6 @@ const fmtDate = (d?: string | null) => (d ? format(parseISO(d), 'dd/MM/yyyy') : 
 const inputCls = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
 const inputSmCls = 'w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
 
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve((reader.result as string).split(',')[1])
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
-}
-
 // ─── Seção Delta Plus (leitura/edição inline) ─────────────────────────────────
 
 function SecaoDeltaPlus({ pedido, onSave }: {
@@ -673,40 +664,25 @@ function ModalDetalhe({ pedido: init, onClose, onAvancar, onLembrete, onUpdateDe
 
 // ─── Modal Importar PDF ───────────────────────────────────────────────────────
 
-function ModalImportarPDF({ onClose, clientes, onPedidoCriado }: {
+function ModalImportarPDF({ onClose, onPedidoCriado }: {
   onClose: () => void
-  clientes: Cliente[]
   onPedidoCriado: (pedido: Pedido) => void
 }) {
   const [arquivo, setArquivo] = useState<File | null>(null)
-  const [clienteId, setClienteId] = useState('')
-  const [busca, setBusca] = useState('')
   const [loading, setLoading] = useState(false)
   const [erro, setErro] = useState('')
   const [sucesso, setSucesso] = useState<Pedido | null>(null)
 
-  const clientesOrdenados = [...clientes]
-    .sort((a, b) => (a.empresa || a.nome).localeCompare(b.empresa || b.nome, 'pt-BR'))
-  const clientesFiltrados = busca.trim()
-    ? clientesOrdenados.filter(c => {
-        const termo = busca.toLowerCase()
-        return (
-          (c.empresa || c.nome).toLowerCase().includes(termo) ||
-          (c.cidade ?? '').toLowerCase().includes(termo)
-        )
-      })
-    : clientesOrdenados
-
   async function processar() {
-    if (!arquivo || !clienteId) return
+    if (!arquivo) return
     setLoading(true)
     setErro('')
     try {
-      const base64 = await fileToBase64(arquivo)
+      const formData = new FormData()
+      formData.append('attachment', arquivo)
       const res = await fetch('/api/processar-pedido', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pdf_base64: base64, cliente_id: clienteId }),
+        body: formData,
       })
       const data = await res.json()
       if (!res.ok || data.error) throw new Error(data.error || 'Erro ao processar PDF')
@@ -774,33 +750,6 @@ function ModalImportarPDF({ onClose, clientes, onPedidoCriado }: {
               </label>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Cliente</label>
-              <input
-                type="text"
-                className={`${inputCls} mb-1.5`}
-                placeholder="Buscar cliente..."
-                value={busca}
-                onChange={e => setBusca(e.target.value)}
-              />
-              <select
-                className={inputCls}
-                value={clienteId}
-                onChange={e => setClienteId(e.target.value)}
-                size={Math.min(clientesFiltrados.length + 1, 6)}
-              >
-                <option value="">— Selecione —</option>
-                {clientesFiltrados.map(c => {
-                  const label = c.empresa || c.nome
-                  return (
-                    <option key={c.id} value={c.id}>
-                      {c.cidade ? `${label} - ${c.cidade}` : label}
-                    </option>
-                  )
-                })}
-              </select>
-            </div>
-
             {erro && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{erro}</div>
             )}
@@ -814,7 +763,7 @@ function ModalImportarPDF({ onClose, clientes, onPedidoCriado }: {
               </button>
               <button
                 onClick={processar}
-                disabled={!arquivo || !clienteId || loading}
+                disabled={!arquivo || loading}
                 className="flex-1 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {loading ? (
@@ -1115,7 +1064,6 @@ export default function PedidosPage() {
       {showModalImportar && (
         <ModalImportarPDF
           onClose={() => setShowModalImportar(false)}
-          clientes={clientes}
           onPedidoCriado={p => setPedidos(prev => [p, ...prev])}
         />
       )}
