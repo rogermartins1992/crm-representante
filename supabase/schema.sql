@@ -99,6 +99,21 @@ create table if not exists lembretes (
   created_at timestamptz default now()
 );
 
+create table if not exists danfes_pendentes (
+  id uuid default gen_random_uuid() primary key,
+  nf_numero text,
+  nf_chave_acesso text,
+  nf_data_emissao timestamptz,
+  cnpj text,
+  razao_social text,
+  valor_total numeric(12,2),
+  transportadora text,
+  pedido_sugerido_id uuid references pedidos(id) on delete set null,
+  status text default 'aguardando_confirmacao' check (status in ('aguardando_confirmacao', 'confirmada', 'rejeitada')),
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
 -- ── Desabilitar RLS (CRM pessoal, sem autenticação) ──────
 -- Permite que a publishable key leia e grave dados
 
@@ -108,6 +123,7 @@ alter table pedidos disable row level security;
 alter table itens_pedido disable row level security;
 alter table metas disable row level security;
 alter table lembretes disable row level security;
+alter table danfes_pendentes disable row level security;
 
 -- ── Permissões para a role anon ───────────────────────────
 grant all on clientes to anon;
@@ -116,6 +132,7 @@ grant all on pedidos to anon;
 grant all on itens_pedido to anon;
 grant all on metas to anon;
 grant all on lembretes to anon;
+grant all on danfes_pendentes to anon;
 
 -- ── Índices ───────────────────────────────────────────────
 create index if not exists idx_visitas_cliente on visitas(cliente_id);
@@ -128,6 +145,9 @@ create index if not exists idx_lembretes_cliente on lembretes(cliente_id);
 create index if not exists idx_lembretes_data on lembretes(data_lembrete) where concluido = false;
 create index if not exists idx_pedidos_nf_status on pedidos(nf_status) where nf_status = 'pendente';
 create unique index if not exists idx_pedidos_nf_chave_acesso on pedidos(nf_chave_acesso) where nf_chave_acesso is not null;
+create index if not exists idx_danfes_pendentes_cnpj on danfes_pendentes(cnpj);
+create index if not exists idx_danfes_pendentes_status on danfes_pendentes(status) where status = 'aguardando_confirmacao';
+create index if not exists idx_danfes_pendentes_pedido_sugerido on danfes_pendentes(pedido_sugerido_id);
 
 -- ── Migração: adicionar hora_lembrete se a tabela já existe ──
 -- Execute este bloco se a tabela lembretes já existia antes:
@@ -151,3 +171,25 @@ ALTER TABLE pedidos DROP CONSTRAINT IF EXISTS pedidos_nf_status_check;
 ALTER TABLE pedidos ADD CONSTRAINT pedidos_nf_status_check check (nf_status in ('pendente', 'capturada', 'erro'));
 CREATE INDEX IF NOT EXISTS idx_pedidos_nf_status ON pedidos(nf_status) WHERE nf_status = 'pendente';
 CREATE UNIQUE INDEX IF NOT EXISTS idx_pedidos_nf_chave_acesso ON pedidos(nf_chave_acesso) WHERE nf_chave_acesso IS NOT NULL;
+
+-- ── Migração: tabela danfes_pendentes (DANFEs aguardando confirmação manual) ──
+-- Execute este bloco no SQL Editor do Supabase:
+CREATE TABLE IF NOT EXISTS danfes_pendentes (
+  id uuid default gen_random_uuid() primary key,
+  nf_numero text,
+  nf_chave_acesso text,
+  nf_data_emissao timestamptz,
+  cnpj text,
+  razao_social text,
+  valor_total numeric(12,2),
+  transportadora text,
+  pedido_sugerido_id uuid references pedidos(id) on delete set null,
+  status text default 'aguardando_confirmacao' check (status in ('aguardando_confirmacao', 'confirmada', 'rejeitada')),
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+ALTER TABLE danfes_pendentes DISABLE ROW LEVEL SECURITY;
+GRANT ALL ON danfes_pendentes TO anon;
+CREATE INDEX IF NOT EXISTS idx_danfes_pendentes_cnpj ON danfes_pendentes(cnpj);
+CREATE INDEX IF NOT EXISTS idx_danfes_pendentes_status ON danfes_pendentes(status) WHERE status = 'aguardando_confirmacao';
+CREATE INDEX IF NOT EXISTS idx_danfes_pendentes_pedido_sugerido ON danfes_pendentes(pedido_sugerido_id);
