@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { Cliente, Visita, Pedido, Meta, ItemPedido, HistoricoPedido } from './supabase'
+import type { Cliente, Visita, Pedido, Meta, ItemPedido, HistoricoPedido, DanfePendente } from './supabase'
 
 // ── Clientes ──────────────────────────────────────────────
 
@@ -288,4 +288,15 @@ export async function addHistoricoPedido(
     .from('historico_pedido')
     .insert({ pedido_id, descricao, status_anterior, status_novo })
   if (error) throw new Error(`[${error.code}] ${error.message}`)
+}
+
+// ── DANFEs Pendentes ──────────────────────────────────────
+
+export async function getDanfesPendentes(): Promise<DanfePendente[]> {
+  const { data, error } = await supabase
+    .from('danfes_pendentes')
+    .select('*, pedidos:pedido_sugerido_id(*, clientes(*))')
+    .order('created_at', { ascending: false })
+  if (error) throw new Error(`[${error.code}] ${error.message}${error.details ? ' — ' + error.details : ''}`)
+  return data ?? []
 }

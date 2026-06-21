@@ -13,6 +13,7 @@ import {
   X,
   Clock,
   LogOut,
+  FileCheck,
 } from 'lucide-react'
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
@@ -23,6 +24,7 @@ const nav = [
   { href: '/visitas', label: 'Visitas', icon: CalendarCheck },
   { href: '/follow-ups', label: 'Follow-ups', icon: Clock },
   { href: '/pedidos', label: 'Pedidos', icon: ShoppingCart },
+  { href: '/danfes-pendentes', label: 'DANFEs Pendentes', icon: FileCheck },
   { href: '/metas', label: 'Meta Mensal', icon: Target },
 ]
 

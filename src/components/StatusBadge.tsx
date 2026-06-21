@@ -14,6 +14,10 @@ const configs: Record<string, { label: string; cls: string }> = {
   presencial:  { label: 'Presencial',         cls: 'bg-indigo-100 text-indigo-700' },
   remota:      { label: 'Remota',             cls: 'bg-cyan-100 text-cyan-700' },
   telefone:    { label: 'Telefone',           cls: 'bg-orange-100 text-orange-700' },
+  // DANFEs pendentes
+  aguardando_confirmacao: { label: 'Ag. Confirmação', cls: 'bg-yellow-100 text-yellow-700' },
+  confirmada:             { label: 'Confirmada',      cls: 'bg-green-100 text-green-700' },
+  rejeitada:              { label: 'Rejeitada',       cls: 'bg-red-100 text-red-700' },
 }
 
 export default function StatusBadge({ status }: { status: string }) {

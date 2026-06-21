@@ -100,3 +100,19 @@ export type Meta = {
   valor_meta: number
   created_at: string
 }
+
+export type DanfePendente = {
+  id: string
+  nf_numero?: string
+  nf_chave_acesso?: string
+  nf_data_emissao?: string
+  cnpj?: string
+  razao_social?: string
+  valor_total?: number
+  transportadora?: string
+  pedido_sugerido_id?: string
+  status: 'aguardando_confirmacao' | 'confirmada' | 'rejeitada'
+  created_at: string
+  updated_at: string
+  pedidos?: Pedido
+}
