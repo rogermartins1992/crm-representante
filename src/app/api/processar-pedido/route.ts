@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseServer } from '@/lib/supabase-server'
+import { normalizeCnpj } from '@/lib/format'
 
 export const maxDuration = 60
 
@@ -117,6 +118,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const dados = await extrairDadosDoPdf(pdfBase64)
+    dados.cnpj = normalizeCnpj(dados.cnpj)
     const clienteId = await buscarOuCriarCliente(dados)
 
     const { data: pedido, error: insertError } = await getSupabaseServer()

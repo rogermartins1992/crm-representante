@@ -6,6 +6,7 @@ import { getClientes, createCliente, deleteCliente, getVisitas, getLembretes, cr
 import { supabase } from '@/lib/supabase'
 import type { Cliente, Visita } from '@/lib/supabase'
 import StatusBadge from '@/components/StatusBadge'
+import { formatCnpj } from '@/lib/format'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
@@ -206,7 +207,7 @@ function ClienteDetalheModal({ cliente, onClose }: { cliente: Cliente; onClose: 
                   <Building2 size={14} className="text-gray-400 shrink-0" />{cliente.empresa}
                 </p>
               )}
-              {cliente.cnpj && <p className="text-xs text-gray-400 pl-5">{cliente.cnpj}</p>}
+              {cliente.cnpj && <p className="text-xs text-gray-400 pl-5">{formatCnpj(cliente.cnpj)}</p>}
               {cliente.telefone && (
                 <a href={`tel:${cliente.telefone}`} className="text-sm text-blue-600 flex items-center gap-1.5 hover:underline">
                   <Phone size={14} />{cliente.telefone}
@@ -736,7 +737,7 @@ export default function ClientesPage() {
               <Building2 size={13} className="text-gray-400 shrink-0" />
               {c.empresa}
             </p>
-            {c.cnpj && <p className="text-xs text-gray-400 mt-0.5 pl-4">{c.cnpj}</p>}
+            {c.cnpj && <p className="text-xs text-gray-400 mt-0.5 pl-4">{formatCnpj(c.cnpj)}</p>}
             <div className="mt-3 space-y-1">
               {c.telefone && (
                 <a href={`tel:${c.telefone}`} onClick={e => e.stopPropagation()} className="text-sm text-gray-600 flex items-center gap-1.5 hover:text-blue-600">

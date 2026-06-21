@@ -12,6 +12,7 @@ import {
 } from '@/lib/db'
 import type { Pedido, Cliente, ItemPedido, HistoricoPedido } from '@/lib/supabase'
 import StatusBadge from '@/components/StatusBadge'
+import { formatCnpj } from '@/lib/format'
 import { format, parseISO, differenceInDays } from 'date-fns'
 
 // ─── Status Delta Plus ────────────────────────────────────────────────────────
@@ -511,7 +512,7 @@ function ModalDetalhe({ pedido: init, onClose, onAvancar, onLembrete, onUpdateDe
               )}
             </div>
             <p className="font-semibold text-gray-800 mt-1">{pedido.clientes?.empresa}</p>
-            <p className="text-sm text-gray-500">{pedido.clientes?.nome}</p>
+            <p className="text-sm text-gray-500">{pedido.clientes?.nome}{pedido.cnpj ? ` · CNPJ: ${formatCnpj(pedido.cnpj)}` : ''}</p>
           </div>
           <button onClick={onClose} className="mt-1">
             <X size={20} className="text-gray-400 hover:text-gray-600" />
@@ -867,7 +868,7 @@ function PedidoCard({ p, onClick }: { p: Pedido; onClick: () => void }) {
 
           {/* Cliente */}
           <p className="font-semibold text-gray-800 mt-1.5">{p.clientes?.empresa}</p>
-          <p className="text-xs text-gray-500">{p.clientes?.nome}</p>
+          <p className="text-xs text-gray-500">{p.clientes?.nome}{p.cnpj ? ` · CNPJ: ${formatCnpj(p.cnpj)}` : ''}</p>
 
           {/* Campos Delta inline */}
           <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-2 text-xs text-gray-500">
