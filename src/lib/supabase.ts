@@ -69,6 +69,7 @@ export type Pedido = {
   nf_chave_acesso?: string
   nf_data_emissao?: string
   nf_status?: 'pendente' | 'capturada' | 'erro'
+  nf_pdf_url?: string
   created_at: string
   updated_at: string
   clientes?: Cliente
@@ -110,6 +111,7 @@ export type DanfePendente = {
   razao_social?: string
   valor_total?: number
   transportadora?: string
+  pdf_url?: string
   pedido_sugerido_id?: string
   status: 'aguardando_confirmacao' | 'confirmada' | 'rejeitada'
   created_at: string

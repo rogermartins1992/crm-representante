@@ -2,17 +2,17 @@
 
 import { useState, useEffect } from 'react'
 import {
-  Plus, ShoppingCart, X, AlertTriangle, Bell, CheckCircle2,
-  Package, Clock, Trash2, Pencil, Save, Truck, FileText, Upload,
+  Plus, ShoppingCart, X, AlertTriangle, Bell, CheckCircle2, XCircle,
+  Package, Clock, Trash2, Pencil, Save, Truck, FileText, Upload, Download,
 } from 'lucide-react'
 import {
   getPedidos, createPedido, updatePedidoStatus, marcarLembreteEnviado,
   getClientes, getItensPedido, createItensPedido,
-  getHistoricoPedido, addHistoricoPedido, updatePedido,
+  getHistoricoPedido, addHistoricoPedido, updatePedido, getDanfesAguardando,
 } from '@/lib/db'
-import type { Pedido, Cliente, ItemPedido, HistoricoPedido } from '@/lib/supabase'
+import type { Pedido, Cliente, ItemPedido, HistoricoPedido, DanfePendente } from '@/lib/supabase'
 import StatusBadge from '@/components/StatusBadge'
-import { formatCnpj } from '@/lib/format'
+import { formatCnpj, normalizeCnpj } from '@/lib/format'
 import { format, parseISO, differenceInDays } from 'date-fns'
 
 // ─── Status Delta Plus ────────────────────────────────────────────────────────
@@ -780,9 +780,66 @@ function ModalImportarPDF({ onClose, onPedidoCriado }: {
   )
 }
 
+// ─── Aviso de DANFE pendente ───────────────────────────────────────────────────
+
+function DanfeAviso({ danfe, onConfirmar, onRejeitar }: {
+  danfe: DanfePendente
+  onConfirmar: () => Promise<void>
+  onRejeitar: () => Promise<void>
+}) {
+  const [acting, setActing] = useState(false)
+
+  async function confirmar(e: React.MouseEvent) {
+    e.stopPropagation()
+    setActing(true)
+    try { await onConfirmar() } finally { setActing(false) }
+  }
+
+  async function rejeitar(e: React.MouseEvent) {
+    e.stopPropagation()
+    setActing(true)
+    try { await onRejeitar() } finally { setActing(false) }
+  }
+
+  return (
+    <div onClick={e => e.stopPropagation()} className="mt-3 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+      <p className="text-xs font-semibold text-yellow-700 flex items-center gap-1.5">
+        <FileText size={13} /> DANFE recebida — aguardando confirmação
+      </p>
+      <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1.5 text-xs text-gray-600">
+        <span>NF {danfe.nf_numero || '—'}</span>
+        <span>{(danfe.valor_total ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+        {danfe.transportadora && <span>{danfe.transportadora}</span>}
+      </div>
+      <div className="flex gap-2 mt-2">
+        <button
+          onClick={confirmar}
+          disabled={acting}
+          className="flex items-center gap-1 text-xs bg-green-600 text-white px-2.5 py-1 rounded-lg hover:bg-green-700 disabled:opacity-50"
+        >
+          <CheckCircle2 size={11} /> Confirmar vínculo
+        </button>
+        <button
+          onClick={rejeitar}
+          disabled={acting}
+          className="flex items-center gap-1 text-xs text-red-600 border border-red-200 px-2.5 py-1 rounded-lg hover:bg-red-50 disabled:opacity-50"
+        >
+          <XCircle size={11} /> Rejeitar
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ─── Card de Pedido ───────────────────────────────────────────────────────────
 
-function PedidoCard({ p, onClick }: { p: Pedido; onClick: () => void }) {
+function PedidoCard({ p, danfe, onClick, onConfirmarDanfe, onRejeitarDanfe }: {
+  p: Pedido
+  danfe?: DanfePendente
+  onClick: () => void
+  onConfirmarDanfe: (danfeId: string, pedidoId: string) => Promise<void>
+  onRejeitarDanfe: (danfeId: string) => Promise<void>
+}) {
   const hoje = new Date()
   const dias = differenceInDays(hoje, parseISO(p.data_pedido))
   const alertaFaturamento = ['aprovado', 'em_producao'].includes(p.status) && dias >= 4 && !p.lembrete_faturamento_enviado
@@ -868,6 +925,26 @@ function PedidoCard({ p, onClick }: { p: Pedido; onClick: () => void }) {
           </p>
         </div>
       </div>
+
+      {danfe && (
+        <DanfeAviso
+          danfe={danfe}
+          onConfirmar={() => onConfirmarDanfe(danfe.id, p.id)}
+          onRejeitar={() => onRejeitarDanfe(danfe.id)}
+        />
+      )}
+
+      {p.nf_pdf_url && (
+        <a
+          href={p.nf_pdf_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={e => e.stopPropagation()}
+          className="mt-3 flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 font-medium w-fit"
+        >
+          <Download size={12} /> Baixar DANFE
+        </a>
+      )}
     </div>
   )
 }
@@ -877,20 +954,64 @@ function PedidoCard({ p, onClick }: { p: Pedido; onClick: () => void }) {
 export default function PedidosPage() {
   const [pedidos, setPedidos] = useState<Pedido[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
+  const [danfesAguardando, setDanfesAguardando] = useState<DanfePendente[]>([])
   const [filtroStatus, setFiltroStatus] = useState('todos')
   const [filtroDelta, setFiltroDelta] = useState('todos')
   const [showModal, setShowModal] = useState(false)
   const [showModalImportar, setShowModalImportar] = useState(false)
   const [pedidoAberto, setPedidoAberto] = useState<Pedido | null>(null)
   const [loading, setLoading] = useState(true)
+  const [erro, setErro] = useState('')
 
   useEffect(() => {
-    Promise.all([getPedidos(), getClientes()]).then(([p, c]) => {
+    Promise.all([getPedidos(), getClientes(), getDanfesAguardando()]).then(([p, c, d]) => {
       setPedidos(p)
       setClientes(c)
+      setDanfesAguardando(d)
       setLoading(false)
     })
   }, [])
+
+  function danfeDoPedido(p: Pedido): DanfePendente | undefined {
+    const cnpjPedido = normalizeCnpj(p.cnpj)
+    if (!cnpjPedido || p.status === 'cancelado') return undefined
+    return danfesAguardando.find(d => normalizeCnpj(d.cnpj) === cnpjPedido)
+  }
+
+  async function confirmarDanfe(danfeId: string, pedidoId: string) {
+    setErro('')
+    const res = await fetch(`/api/danfes-pendentes/${danfeId}/confirmar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pedido_id: pedidoId }),
+    })
+    const data = await res.json()
+    if (!res.ok || data.error) {
+      setErro(data.error || 'Erro ao confirmar a DANFE.')
+      return
+    }
+    setDanfesAguardando(prev => prev.filter(d => d.id !== danfeId))
+    setPedidos(prev => prev.map(p => p.id === pedidoId ? {
+      ...p,
+      status_delta: 'faturado',
+      nf_numero: data.danfe.nf_numero,
+      nf_chave_acesso: data.danfe.nf_chave_acesso,
+      nf_data_emissao: data.danfe.nf_data_emissao,
+      nf_pdf_url: data.danfe.pdf_url,
+      nf_status: 'capturada',
+    } : p))
+  }
+
+  async function rejeitarDanfe(danfeId: string) {
+    setErro('')
+    const res = await fetch(`/api/danfes-pendentes/${danfeId}/rejeitar`, { method: 'POST' })
+    const data = await res.json()
+    if (!res.ok || data.error) {
+      setErro(data.error || 'Erro ao rejeitar a DANFE.')
+      return
+    }
+    setDanfesAguardando(prev => prev.filter(d => d.id !== danfeId))
+  }
 
   const filtrados = pedidos
     .filter(p => filtroStatus === 'todos' || p.status === filtroStatus)
@@ -991,6 +1112,10 @@ export default function PedidosPage() {
         </div>
       </div>
 
+      {erro && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{erro}</div>
+      )}
+
       {/* Filtro Status Delta Plus */}
       <div>
         <p className="text-xs font-medium text-gray-400 mb-2 flex items-center gap-1.5">
@@ -1044,7 +1169,14 @@ export default function PedidosPage() {
       {/* Lista */}
       <div className="space-y-3">
         {filtrados.map(p => (
-          <PedidoCard key={p.id} p={p} onClick={() => setPedidoAberto(p)} />
+          <PedidoCard
+            key={p.id}
+            p={p}
+            danfe={danfeDoPedido(p)}
+            onClick={() => setPedidoAberto(p)}
+            onConfirmarDanfe={confirmarDanfe}
+            onRejeitarDanfe={rejeitarDanfe}
+          />
         ))}
         {filtrados.length === 0 && (
           <div className="text-center py-12 text-gray-400">

@@ -66,6 +66,7 @@ create table if not exists pedidos (
   nf_chave_acesso text,
   nf_data_emissao timestamptz,
   nf_status text default 'pendente' check (nf_status in ('pendente', 'capturada', 'erro')),
+  nf_pdf_url text,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
@@ -108,11 +109,17 @@ create table if not exists danfes_pendentes (
   razao_social text,
   valor_total numeric(12,2),
   transportadora text,
+  pdf_url text,
   pedido_sugerido_id uuid references pedidos(id) on delete set null,
   status text default 'aguardando_confirmacao' check (status in ('aguardando_confirmacao', 'confirmada', 'rejeitada')),
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
+
+-- ── Storage: bucket público para os PDFs de DANFE ─────────
+insert into storage.buckets (id, name, public)
+values ('danfes', 'danfes', true)
+on conflict (id) do nothing;
 
 -- ── Desabilitar RLS (CRM pessoal, sem autenticação) ──────
 -- Permite que a publishable key leia e grave dados
@@ -183,6 +190,7 @@ CREATE TABLE IF NOT EXISTS danfes_pendentes (
   razao_social text,
   valor_total numeric(12,2),
   transportadora text,
+  pdf_url text,
   pedido_sugerido_id uuid references pedidos(id) on delete set null,
   status text default 'aguardando_confirmacao' check (status in ('aguardando_confirmacao', 'confirmada', 'rejeitada')),
   created_at timestamptz default now(),
@@ -193,3 +201,11 @@ GRANT ALL ON danfes_pendentes TO anon;
 CREATE INDEX IF NOT EXISTS idx_danfes_pendentes_cnpj ON danfes_pendentes(cnpj);
 CREATE INDEX IF NOT EXISTS idx_danfes_pendentes_status ON danfes_pendentes(status) WHERE status = 'aguardando_confirmacao';
 CREATE INDEX IF NOT EXISTS idx_danfes_pendentes_pedido_sugerido ON danfes_pendentes(pedido_sugerido_id);
+
+-- ── Migração: PDF da DANFE (storage + colunas de URL) ────────
+-- Execute este bloco no SQL Editor do Supabase:
+ALTER TABLE danfes_pendentes ADD COLUMN IF NOT EXISTS pdf_url text;
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS nf_pdf_url text;
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('danfes', 'danfes', true)
+ON CONFLICT (id) DO NOTHING;

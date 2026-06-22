@@ -31,7 +31,9 @@ export async function POST(
         nf_numero: danfe.nf_numero,
         nf_chave_acesso: danfe.nf_chave_acesso,
         nf_data_emissao: danfe.nf_data_emissao,
+        nf_pdf_url: danfe.pdf_url,
         nf_status: 'capturada',
+        status_delta: 'faturado',
         updated_at: new Date().toISOString(),
       })
       .eq('id', pedidoId)

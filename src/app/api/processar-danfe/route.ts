@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseServer } from '@/lib/supabase-server'
 import { normalizeCnpj } from '@/lib/format'
@@ -66,6 +67,19 @@ valor_total deve ser um número. Retorne apenas o JSON, sem explicações.`
   return JSON.parse(text) as DadosDanfe
 }
 
+async function uploadPdf(buffer: Buffer): Promise<string | null> {
+  const fileName = `${Date.now()}-${randomUUID()}.pdf`
+  const { error } = await getSupabaseServer().storage
+    .from('danfes')
+    .upload(fileName, buffer, { contentType: 'application/pdf' })
+  if (error) {
+    console.error('[processar-danfe] erro ao subir PDF no storage:', error)
+    return null
+  }
+  const { data } = getSupabaseServer().storage.from('danfes').getPublicUrl(fileName)
+  return data.publicUrl
+}
+
 async function buscarPedidoSugerido(cnpj: string): Promise<string | null> {
   if (!cnpj) return null
 
@@ -82,6 +96,7 @@ async function buscarPedidoSugerido(cnpj: string): Promise<string | null> {
 }
 
 export async function POST(request: NextRequest) {
+  let buffer: Buffer
   let pdfBase64: string
 
   try {
@@ -96,14 +111,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'O arquivo enviado precisa ser um PDF (application/pdf).' }, { status: 400 })
     }
 
-    const buffer = Buffer.from(await file.arrayBuffer())
+    buffer = Buffer.from(await file.arrayBuffer())
     pdfBase64 = buffer.toString('base64')
   } catch {
     return NextResponse.json({ error: 'Erro ao processar o arquivo enviado.' }, { status: 400 })
   }
 
   try {
-    const dados = await extrairDadosDoPdf(pdfBase64)
+    const [dados, pdfUrl] = await Promise.all([
+      extrairDadosDoPdf(pdfBase64),
+      uploadPdf(buffer),
+    ])
     const cnpj = normalizeCnpj(dados.cnpj_destinatario)
     const pedidoSugeridoId = await buscarPedidoSugerido(cnpj)
 
@@ -117,6 +135,7 @@ export async function POST(request: NextRequest) {
         razao_social: dados.razao_social_destinatario,
         valor_total: dados.valor_total,
         transportadora: dados.transportadora,
+        pdf_url: pdfUrl,
         pedido_sugerido_id: pedidoSugeridoId,
         status: 'aguardando_confirmacao',
       })

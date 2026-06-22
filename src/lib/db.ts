@@ -300,3 +300,13 @@ export async function getDanfesPendentes(): Promise<DanfePendente[]> {
   if (error) throw new Error(`[${error.code}] ${error.message}${error.details ? ' — ' + error.details : ''}`)
   return data ?? []
 }
+
+export async function getDanfesAguardando(): Promise<DanfePendente[]> {
+  const { data, error } = await supabase
+    .from('danfes_pendentes')
+    .select('*')
+    .eq('status', 'aguardando_confirmacao')
+    .order('created_at', { ascending: false })
+  if (error) throw new Error(`[${error.code}] ${error.message}${error.details ? ' — ' + error.details : ''}`)
+  return data ?? []
+}
