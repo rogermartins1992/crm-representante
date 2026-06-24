@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseServer } from '@/lib/supabase-server'
 import { normalizeCnpj } from '@/lib/format'
+import { verifyWebhookSecret } from '@/lib/verify-webhook-secret'
 
 export const maxDuration = 60
 
@@ -96,6 +97,9 @@ async function buscarPedidoSugerido(cnpj: string): Promise<string | null> {
 }
 
 export async function POST(request: NextRequest) {
+  const authError = verifyWebhookSecret(request)
+  if (authError) return authError
+
   let buffer: Buffer
   let pdfBase64: string
 

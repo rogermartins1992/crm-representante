@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseServer } from '@/lib/supabase-server'
 import { normalizeCnpj } from '@/lib/format'
+import { verifyWebhookSecret } from '@/lib/verify-webhook-secret'
 
 export const maxDuration = 60
 
@@ -96,6 +97,9 @@ async function buscarOuCriarCliente(dados: DadosOrcamento): Promise<string | nul
 }
 
 export async function POST(request: NextRequest) {
+  const authError = verifyWebhookSecret(request)
+  if (authError) return authError
+
   let pdfBase64: string
 
   try {
