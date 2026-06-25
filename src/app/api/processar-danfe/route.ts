@@ -103,22 +103,44 @@ export async function POST(request: NextRequest) {
   let buffer: Buffer
   let pdfBase64: string
 
-  try {
-    const formData = await request.formData()
-    const file = formData.get('attachment')
+  const contentType = request.headers.get('content-type') ?? ''
 
-    if (!file || !(file instanceof File)) {
-      return NextResponse.json({ error: 'Campo "attachment" com arquivo PDF é obrigatório.' }, { status: 400 })
+  if (contentType.includes('application/json')) {
+    try {
+      const body = await request.json()
+      const rawBase64 = body?.pdf_base64
+
+      if (!rawBase64 || typeof rawBase64 !== 'string') {
+        return NextResponse.json({ error: 'Campo "pdf_base64" com o PDF em base64 é obrigatório.' }, { status: 400 })
+      }
+
+      pdfBase64 = rawBase64.includes(',') ? rawBase64.slice(rawBase64.indexOf(',') + 1) : rawBase64
+      buffer = Buffer.from(pdfBase64, 'base64')
+
+      if (buffer.length === 0) {
+        return NextResponse.json({ error: 'O campo "pdf_base64" não contém um PDF válido.' }, { status: 400 })
+      }
+    } catch {
+      return NextResponse.json({ error: 'Erro ao processar o PDF em base64 enviado.' }, { status: 400 })
     }
+  } else {
+    try {
+      const formData = await request.formData()
+      const file = formData.get('attachment')
 
-    if (file.type !== 'application/pdf') {
-      return NextResponse.json({ error: 'O arquivo enviado precisa ser um PDF (application/pdf).' }, { status: 400 })
+      if (!file || !(file instanceof File)) {
+        return NextResponse.json({ error: 'Campo "attachment" com arquivo PDF é obrigatório.' }, { status: 400 })
+      }
+
+      if (file.type !== 'application/pdf') {
+        return NextResponse.json({ error: 'O arquivo enviado precisa ser um PDF (application/pdf).' }, { status: 400 })
+      }
+
+      buffer = Buffer.from(await file.arrayBuffer())
+      pdfBase64 = buffer.toString('base64')
+    } catch {
+      return NextResponse.json({ error: 'Erro ao processar o arquivo enviado.' }, { status: 400 })
     }
-
-    buffer = Buffer.from(await file.arrayBuffer())
-    pdfBase64 = buffer.toString('base64')
-  } catch {
-    return NextResponse.json({ error: 'Erro ao processar o arquivo enviado.' }, { status: 400 })
   }
 
   try {
