@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
       }
 
       if (file.type !== 'application/pdf') {
-        return NextResponse.json({ error: 'O arquivo enviado precisa ser um PDF (application/pdf).' }, { status: 400 })
+        return NextResponse.json({ error: `O arquivo enviado precisa ser um PDF (application/pdf). Tipo recebido: "${file.type || '(vazio)'}"` }, { status: 400 })
       }
 
       buffer = Buffer.from(await file.arrayBuffer())
