@@ -9,6 +9,7 @@ import {
   getPedidos, createPedido, updatePedidoStatus, marcarLembreteEnviado,
   getClientes, getItensPedido, createItensPedido,
   getHistoricoPedido, addHistoricoPedido, updatePedido, getDanfesAguardando,
+  deletePedido,
 } from '@/lib/db'
 import type { Pedido, Cliente, ItemPedido, HistoricoPedido, DanfePendente } from '@/lib/supabase'
 import StatusBadge from '@/components/StatusBadge'
@@ -192,6 +193,62 @@ function Row({ label, value }: { label: string; value?: string | null }) {
     <div>
       <p className="text-xs text-gray-400">{label}</p>
       <p className="text-sm font-medium text-gray-800 mt-0.5">{value || '—'}</p>
+    </div>
+  )
+}
+
+// ─── Modal Confirmar Delete ───────────────────────────────────────────────────
+
+function ModalConfirmarDelete({ pedido, onCancel, onConfirm }: {
+  pedido: Pedido
+  onCancel: () => void
+  onConfirm: () => Promise<void>
+}) {
+  const [deleting, setDeleting] = useState(false)
+
+  async function handleConfirm() {
+    setDeleting(true)
+    try { await onConfirm() } finally { setDeleting(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl p-6 space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+            <Trash2 size={18} className="text-red-600" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-gray-900">Excluir pedido</h3>
+            <p className="text-sm text-gray-500 mt-0.5">
+              <span className="font-mono font-bold text-blue-700">{pedido.numero}</span> · {pedido.clientes?.empresa}
+            </p>
+          </div>
+        </div>
+        <p className="text-sm text-gray-600">
+          Esta ação não pode ser desfeita. Todos os itens e histórico do pedido serão removidos permanentemente.
+        </p>
+        <div className="flex gap-3 pt-1">
+          <button
+            onClick={onCancel}
+            disabled={deleting}
+            className="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleConfirm}
+            disabled={deleting}
+            className="flex-1 py-2.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {deleting ? (
+              <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Excluindo...</>
+            ) : (
+              <><Trash2 size={14} /> Excluir</>
+            )}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -833,12 +890,13 @@ function DanfeAviso({ danfe, onConfirmar, onRejeitar }: {
 
 // ─── Card de Pedido ───────────────────────────────────────────────────────────
 
-function PedidoCard({ p, danfe, onClick, onConfirmarDanfe, onRejeitarDanfe }: {
+function PedidoCard({ p, danfe, onClick, onConfirmarDanfe, onRejeitarDanfe, onDelete }: {
   p: Pedido
   danfe?: DanfePendente
   onClick: () => void
   onConfirmarDanfe: (danfeId: string, pedidoId: string) => Promise<void>
   onRejeitarDanfe: (danfeId: string) => Promise<void>
+  onDelete: () => void
 }) {
   const hoje = new Date()
   const dias = differenceInDays(hoje, parseISO(p.data_pedido))
@@ -916,11 +974,18 @@ function PedidoCard({ p, danfe, onClick, onConfirmarDanfe, onRejeitarDanfe }: {
           )}
         </div>
 
-        <div className="shrink-0 text-right">
+        <div className="shrink-0 text-right flex flex-col items-end gap-2">
+          <button
+            onClick={e => { e.stopPropagation(); onDelete() }}
+            className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+            title="Excluir pedido"
+          >
+            <Trash2 size={14} />
+          </button>
           <p className="text-lg font-bold text-gray-900">
             {p.valor_total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
           </p>
-          <p className="text-xs text-gray-400 mt-1 group-hover:text-blue-500 transition-colors">
+          <p className="text-xs text-gray-400 group-hover:text-blue-500 transition-colors">
             ver detalhes →
           </p>
         </div>
@@ -960,6 +1025,7 @@ export default function PedidosPage() {
   const [showModal, setShowModal] = useState(false)
   const [showModalImportar, setShowModalImportar] = useState(false)
   const [pedidoAberto, setPedidoAberto] = useState<Pedido | null>(null)
+  const [pedidoParaDeletar, setPedidoParaDeletar] = useState<Pedido | null>(null)
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState('')
 
@@ -1049,6 +1115,18 @@ export default function PedidosPage() {
     await marcarLembreteEnviado(id)
     try { await addHistoricoPedido(id, 'Lembrete de faturamento enviado') } catch { /* tabela pode não existir */ }
     setPedidos(prev => prev.map(p => p.id === id ? { ...p, lembrete_faturamento_enviado: true } : p))
+  }
+
+  async function excluirPedido(id: string) {
+    setErro('')
+    try {
+      await deletePedido(id)
+      setPedidos(prev => prev.filter(p => p.id !== id))
+      setPedidoParaDeletar(null)
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Erro ao excluir pedido')
+      setPedidoParaDeletar(null)
+    }
   }
 
   async function updateDelta(id: string, campos: Partial<Pedido>) {
@@ -1176,6 +1254,7 @@ export default function PedidosPage() {
             onClick={() => setPedidoAberto(p)}
             onConfirmarDanfe={confirmarDanfe}
             onRejeitarDanfe={rejeitarDanfe}
+            onDelete={() => setPedidoParaDeletar(p)}
           />
         ))}
         {filtrados.length === 0 && (
@@ -1206,6 +1285,13 @@ export default function PedidosPage() {
           onAvancar={avancar}
           onLembrete={lembrete}
           onUpdateDelta={updateDelta}
+        />
+      )}
+      {pedidoParaDeletar && (
+        <ModalConfirmarDelete
+          pedido={pedidoParaDeletar}
+          onCancel={() => setPedidoParaDeletar(null)}
+          onConfirm={() => excluirPedido(pedidoParaDeletar.id)}
         />
       )}
     </div>
