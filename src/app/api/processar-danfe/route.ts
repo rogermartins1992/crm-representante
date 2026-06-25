@@ -97,6 +97,9 @@ async function buscarPedidoSugerido(cnpj: string): Promise<string | null> {
 }
 
 export async function POST(request: NextRequest) {
+  console.log('[processar-danfe] DEBUG x-webhook-secret recebido:', request.headers.get('x-webhook-secret'))
+  console.log('[processar-danfe] DEBUG MAKE_WEBHOOK_SECRET no processo:', process.env.MAKE_WEBHOOK_SECRET)
+
   const authError = verifyWebhookSecret(request)
   if (authError) return authError
 
