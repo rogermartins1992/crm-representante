@@ -74,6 +74,7 @@ function SecaoDeltaPlus({ pedido, onSave }: {
   const [form, setForm] = useState({
     numero_orcamento: pedido.numero_orcamento ?? '',
     transportadora: pedido.transportadora ?? '',
+    tipo_frete: pedido.tipo_frete ?? '',
     condicao_pagamento: pedido.condicao_pagamento ?? '',
     status_delta: (pedido.status_delta ?? '') as StatusDelta | '',
     numero_nf: pedido.numero_nf ?? '',
@@ -91,6 +92,7 @@ function SecaoDeltaPlus({ pedido, onSave }: {
       await onSave({
         numero_orcamento: form.numero_orcamento || undefined,
         transportadora: form.transportadora || undefined,
+        tipo_frete: form.tipo_frete || undefined,
         condicao_pagamento: form.condicao_pagamento || undefined,
         status_delta: (form.status_delta || undefined) as StatusDelta | undefined,
         numero_nf: form.numero_nf || undefined,
@@ -151,6 +153,14 @@ function SecaoDeltaPlus({ pedido, onSave }: {
             <input className={inputSmCls} value={form.transportadora} onChange={e => set('transportadora', e.target.value)} placeholder="Ex: Jadlog" />
           </div>
           <div>
+            <label className="block text-xs text-gray-500 mb-1">Tipo de Frete</label>
+            <select className={inputSmCls} value={form.tipo_frete} onChange={e => set('tipo_frete', e.target.value)}>
+              <option value="">— Selecione —</option>
+              <option value="CIF">CIF</option>
+              <option value="FOB">FOB</option>
+            </select>
+          </div>
+          <div>
             <label className="block text-xs text-gray-500 mb-1">Condição de Pagamento</label>
             <input className={inputSmCls} value={form.condicao_pagamento} onChange={e => set('condicao_pagamento', e.target.value)} placeholder="Ex: 30/60 DDL" />
           </div>
@@ -177,6 +187,7 @@ function SecaoDeltaPlus({ pedido, onSave }: {
             {!pedido.status_delta && <p className="text-sm text-gray-500 mt-0.5">—</p>}
           </div>
           <Row label="Transportadora" value={pedido.transportadora} />
+          <Row label="Tipo de Frete" value={pedido.tipo_frete} />
           <Row label="Condição de Pagamento" value={pedido.condicao_pagamento} />
           <Row label="Nº NF" value={pedido.numero_nf} />
           <div />
@@ -494,6 +505,141 @@ function ModalNovoPedido({ onClose, onSave, clientes }: {
   )
 }
 
+// ─── Pendência GNRE ───────────────────────────────────────────────────────────
+
+const GNRE_LABEL: Record<NonNullable<Pedido['gnre_status']>, string> = {
+  nao_aplica: '',
+  aguardando_resposta: 'Aguardando decisão do GNRE',
+  cliente_paga: 'Cliente vai recolher o imposto',
+  liberado_sem_pagar: 'Liberado sem recolhimento',
+}
+
+function GnreBanner({ pedido, onUpdate, compact = false }: {
+  pedido: Pedido
+  onUpdate: (campos: Partial<Pedido>) => Promise<void>
+  compact?: boolean
+}) {
+  const [saving, setSaving] = useState(false)
+  const resolvido = pedido.gnre_status === 'cliente_paga' || pedido.gnre_status === 'liberado_sem_pagar'
+
+  async function resolver(decisao: 'cliente_paga' | 'liberado_sem_pagar') {
+    setSaving(true)
+    try {
+      await onUpdate({
+        gnre_status: decisao,
+        gnre_perguntado_em: pedido.gnre_perguntado_em ?? new Date().toISOString(),
+        gnre_respondido_em: new Date().toISOString(),
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function alterar() {
+    setSaving(true)
+    try {
+      await onUpdate({ gnre_status: 'aguardando_resposta', gnre_respondido_em: undefined })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (resolvido) {
+    const cls = pedido.gnre_status === 'cliente_paga'
+      ? { box: 'border-green-200 bg-green-50', text: 'text-green-700', link: 'text-green-600 hover:text-green-800' }
+      : { box: 'border-blue-200 bg-blue-50', text: 'text-blue-700', link: 'text-blue-600 hover:text-blue-800' }
+    return (
+      <div className={`flex items-center justify-between border rounded-xl px-4 py-2.5 ${cls.box}`}>
+        <span className={`flex items-center gap-2 text-sm font-medium ${cls.text}`}>
+          <CheckCircle2 size={15} /> Imposto (GNRE): {GNRE_LABEL[pedido.gnre_status as 'cliente_paga' | 'liberado_sem_pagar']}
+        </span>
+        {!compact && (
+          <button onClick={alterar} disabled={saving} className={`text-xs underline disabled:opacity-50 ${cls.link}`}>
+            alterar
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  const aguardando = pedido.gnre_status === 'aguardando_resposta'
+  const dias = aguardando ? differenceInDays(new Date(), parseISO(pedido.gnre_perguntado_em ?? pedido.created_at)) : 0
+
+  return (
+    <div className={`border rounded-xl ${compact ? 'p-2.5' : 'p-4'} ${aguardando ? 'border-orange-200 bg-orange-50' : 'border-gray-200 bg-gray-50'}`}>
+      <div className={`flex items-center gap-2 font-semibold mb-2 ${compact ? 'text-xs' : 'text-sm'} ${aguardando ? 'text-orange-700' : 'text-gray-600'}`}>
+        <AlertTriangle size={compact ? 13 : 15} />
+        Imposto (GNRE) pendente {aguardando && (dias > 0 ? `· há ${dias} dia${dias > 1 ? 's' : ''}` : '· hoje')}
+      </div>
+      {!compact && (
+        <p className="text-xs text-gray-500 mb-3">
+          O cliente vai recolher o imposto na liberação, ou a mercadoria deve ser liberada sem pagamento?
+        </p>
+      )}
+      <div className="flex gap-2">
+        <button
+          onClick={() => resolver('cliente_paga')}
+          disabled={saving}
+          className={`flex-1 font-medium bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-green-50 hover:border-green-300 hover:text-green-700 disabled:opacity-50 ${compact ? 'text-xs py-1.5' : 'text-xs py-2'}`}
+        >
+          💰 Cliente paga
+        </button>
+        <button
+          onClick={() => resolver('liberado_sem_pagar')}
+          disabled={saving}
+          className={`flex-1 font-medium bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 disabled:opacity-50 ${compact ? 'text-xs py-1.5' : 'text-xs py-2'}`}
+        >
+          🆓 Libera sem pagar
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── Timeline visual do pedido ────────────────────────────────────────────────
+
+function Timeline({ pedido }: { pedido: Pedido }) {
+  const hoje = new Date()
+  const faturado = !!pedido.data_faturamento_real
+  const previsto = pedido.data_faturamento_prevista ? parseISO(pedido.data_faturamento_prevista) : null
+  const atrasado = !faturado && !!previsto && hoje > previsto
+
+  const etapas = [
+    { label: 'Enviado', data: pedido.data_pedido, ok: !!pedido.data_pedido },
+    { label: 'Aprovado', data: undefined, ok: STATUS_FLOW.indexOf(pedido.status) >= STATUS_FLOW.indexOf('aprovado') },
+    {
+      label: faturado ? 'Faturado' : 'Fat. Previsto',
+      data: pedido.data_faturamento_real || pedido.data_faturamento_prevista,
+      ok: faturado,
+      atrasado,
+    },
+    { label: 'Entregue', data: undefined, ok: pedido.status === 'entregue' },
+  ]
+
+  return (
+    <div className="flex items-center">
+      {etapas.map((etapa, i) => (
+        <div key={etapa.label} className="flex items-center flex-1 last:flex-none">
+          <div className="flex flex-col items-center gap-1 min-w-[64px]">
+            <div className={`w-3 h-3 rounded-full border-2 ${
+              etapa.atrasado ? 'bg-red-500 border-red-500'
+                : etapa.ok ? 'bg-blue-600 border-blue-600'
+                : 'bg-white border-gray-300'
+            }`} />
+            <span className={`text-[11px] font-medium ${etapa.atrasado ? 'text-red-600' : etapa.ok ? 'text-gray-700' : 'text-gray-400'}`}>
+              {etapa.label}
+            </span>
+            <span className="text-[10px] text-gray-400">{etapa.data ? fmtDate(etapa.data) : ''}</span>
+          </div>
+          {i < etapas.length - 1 && (
+            <div className={`h-0.5 flex-1 mx-1 ${etapas[i + 1].ok ? 'bg-blue-600' : 'bg-gray-200'}`} />
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ─── Modal Detalhe ────────────────────────────────────────────────────────────
 
 function ModalDetalhe({ pedido: init, onClose, onAvancar, onLembrete, onUpdateDelta }: {
@@ -547,10 +693,7 @@ function ModalDetalhe({ pedido: init, onClose, onAvancar, onLembrete, onUpdateDe
         <div className="sticky top-0 bg-white p-6 border-b border-gray-100 flex items-start justify-between z-10">
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-mono font-bold text-blue-700">{pedido.numero}</span>
-              {pedido.numero_orcamento && (
-                <span className="text-xs text-gray-400 font-mono">ORC: {pedido.numero_orcamento}</span>
-              )}
+              <span className="font-mono text-lg font-bold text-blue-700">{pedido.numero}</span>
               <StatusBadge status={pedido.status} />
               <StatusDeltaBadge status={pedido.status_delta} />
               {alertaFaturamento && (
@@ -568,6 +711,12 @@ function ModalDetalhe({ pedido: init, onClose, onAvancar, onLembrete, onUpdateDe
         </div>
 
         <div className="p-6 space-y-6">
+          {/* Timeline visual */}
+          <Timeline pedido={pedido} />
+
+          {/* Pendência GNRE */}
+          {pedido.nf_pdf_url && <GnreBanner pedido={pedido} onUpdate={handleSaveDelta} />}
+
           {/* KPIs resumo */}
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-gray-50 rounded-xl p-3 text-center">
@@ -575,7 +724,7 @@ function ModalDetalhe({ pedido: init, onClose, onAvancar, onLembrete, onUpdateDe
               <p className="font-semibold text-sm text-gray-800 mt-0.5">{fmtDate(pedido.data_orcamento)}</p>
             </div>
             <div className="bg-gray-50 rounded-xl p-3 text-center">
-              <p className="text-xs text-gray-500">Enviado</p>
+              <p className="text-xs text-gray-500">Enviado Delta</p>
               <p className={`font-semibold text-sm mt-0.5 ${pedido.data_pedido ? 'text-gray-800' : 'text-gray-400 italic'}`}>
                 {pedido.data_pedido ? fmtDate(pedido.data_pedido) : '--/--/----'}
               </p>
@@ -890,13 +1039,14 @@ function DanfeAviso({ danfe, onConfirmar, onRejeitar }: {
 
 // ─── Card de Pedido ───────────────────────────────────────────────────────────
 
-function PedidoCard({ p, danfe, onClick, onConfirmarDanfe, onRejeitarDanfe, onDelete }: {
+function PedidoCard({ p, danfe, onClick, onConfirmarDanfe, onRejeitarDanfe, onDelete, onUpdateGnre }: {
   p: Pedido
   danfe?: DanfePendente
   onClick: () => void
   onConfirmarDanfe: (danfeId: string, pedidoId: string) => Promise<void>
   onRejeitarDanfe: (danfeId: string) => Promise<void>
   onDelete: () => void
+  onUpdateGnre: (campos: Partial<Pedido>) => Promise<void>
 }) {
   const hoje = new Date()
   const dias = differenceInDays(hoje, parseISO(p.data_pedido))
@@ -912,10 +1062,7 @@ function PedidoCard({ p, danfe, onClick, onConfirmarDanfe, onRejeitarDanfe, onDe
         <div className="flex-1 min-w-0">
           {/* Badges */}
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-mono text-sm font-bold text-blue-700">{p.numero}</span>
-            {p.numero_orcamento && (
-              <span className="text-xs text-gray-400 font-mono">ORC: {p.numero_orcamento}</span>
-            )}
+            <span className="font-mono text-lg font-bold text-blue-700">{p.numero}</span>
             <StatusBadge status={p.status} />
             <StatusDeltaBadge status={p.status_delta} />
             {alertaFaturamento && (
@@ -939,10 +1086,13 @@ function PedidoCard({ p, danfe, onClick, onConfirmarDanfe, onRejeitarDanfe, onDe
             {p.transportadora && (
               <span className="flex items-center gap-1">
                 <Truck size={11} className="text-gray-400" /> {p.transportadora}
+                {p.tipo_frete && (
+                  <span className="ml-1 text-[10px] font-semibold text-gray-400 border border-gray-300 rounded px-1">{p.tipo_frete}</span>
+                )}
               </span>
             )}
             {p.condicao_pagamento && (
-              <span>{p.condicao_pagamento}</span>
+              <span>Pagamento: {p.condicao_pagamento}</span>
             )}
             {p.numero_nf && (
               <span className="flex items-center gap-1">
@@ -957,7 +1107,7 @@ function PedidoCard({ p, danfe, onClick, onConfirmarDanfe, onRejeitarDanfe, onDe
               Orçamento: {p.data_orcamento ? fmtDate(p.data_orcamento) : '--/--/----'}
             </span>
             <span className={p.data_pedido ? '' : 'italic text-gray-300'}>
-              Enviado: {p.data_pedido ? fmtDate(p.data_pedido) : '--/--/----'}
+              Enviado Delta: {p.data_pedido ? fmtDate(p.data_pedido) : '--/--/----'}
             </span>
             {p.data_faturamento_prevista && (
               <span>Fat. prev.: {fmtDate(p.data_faturamento_prevista)}</span>
@@ -971,6 +1121,12 @@ function PedidoCard({ p, danfe, onClick, onConfirmarDanfe, onRejeitarDanfe, onDe
 
           {p.observacoes && (
             <p className="text-xs text-gray-400 mt-1 italic truncate max-w-xs">{p.observacoes}</p>
+          )}
+
+          {p.nf_pdf_url && (
+            <div className="mt-2.5 max-w-sm" onClick={e => e.stopPropagation()}>
+              <GnreBanner pedido={p} onUpdate={onUpdateGnre} compact />
+            </div>
           )}
         </div>
 
@@ -1005,9 +1161,9 @@ function PedidoCard({ p, danfe, onClick, onConfirmarDanfe, onRejeitarDanfe, onDe
           target="_blank"
           rel="noopener noreferrer"
           onClick={e => e.stopPropagation()}
-          className="mt-3 flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 font-medium w-fit"
+          className="mt-3 flex items-center gap-1.5 text-xs text-white font-semibold bg-blue-600 hover:bg-blue-700 rounded-lg px-3 py-2 w-fit transition-colors"
         >
-          <Download size={12} /> Baixar DANFE
+          <Download size={13} /> Baixar DANFE
         </a>
       )}
     </div>
@@ -1255,6 +1411,7 @@ export default function PedidosPage() {
             onConfirmarDanfe={confirmarDanfe}
             onRejeitarDanfe={rejeitarDanfe}
             onDelete={() => setPedidoParaDeletar(p)}
+            onUpdateGnre={campos => updateDelta(p.id, campos)}
           />
         ))}
         {filtrados.length === 0 && (

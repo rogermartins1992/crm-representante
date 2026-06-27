@@ -1,14 +1,22 @@
 'use client'
 
+import { Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { HardHat } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
-export default function LoginPage() {
+function LoginButton() {
+  const searchParams = useSearchParams()
+
   async function handleGoogleLogin() {
+    const redirectTo = searchParams.get('redirectTo') || '/'
+    const callbackUrl = new URL('/auth/callback', window.location.origin)
+    callbackUrl.searchParams.set('redirectTo', redirectTo)
+
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: 'https://crm-representante.vercel.app/',
+        redirectTo: callbackUrl.toString(),
         scopes: 'https://www.googleapis.com/auth/gmail.readonly',
       },
     })
@@ -42,5 +50,13 @@ export default function LoginPage() {
         </button>
       </div>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginButton />
+    </Suspense>
   )
 }

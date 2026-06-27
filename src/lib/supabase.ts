@@ -1,9 +1,12 @@
-import { createClient } from '@supabase/supabase-js'
+import { createBrowserClient } from '@supabase/ssr'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-export const supabase = createClient(supabaseUrl, supabaseKey)
+// Cliente usado em Client Components. Guarda a sessão em cookies (em vez de
+// localStorage) para que o proxy.ts (server-side) também consiga ler se o
+// usuário está autenticado e proteger as rotas.
+export const supabase = createBrowserClient(supabaseUrl, supabaseKey)
 
 export type Cliente = {
   id: string
@@ -70,6 +73,10 @@ export type Pedido = {
   nf_data_emissao?: string
   nf_status?: 'pendente' | 'capturada' | 'erro'
   nf_pdf_url?: string
+  // campos pendência de GNRE (recolhimento de imposto na liberação da mercadoria)
+  gnre_status?: 'nao_aplica' | 'aguardando_resposta' | 'cliente_paga' | 'liberado_sem_pagar'
+  gnre_perguntado_em?: string
+  gnre_respondido_em?: string
   created_at: string
   updated_at: string
   clientes?: Cliente

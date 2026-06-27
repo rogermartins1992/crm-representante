@@ -67,6 +67,10 @@ create table if not exists pedidos (
   nf_data_emissao timestamptz,
   nf_status text default 'pendente' check (nf_status in ('pendente', 'capturada', 'erro')),
   nf_pdf_url text,
+  -- campos pendência de GNRE (recolhimento de imposto na liberação da mercadoria)
+  gnre_status text default 'nao_aplica' check (gnre_status in ('nao_aplica', 'aguardando_resposta', 'cliente_paga', 'liberado_sem_pagar')),
+  gnre_perguntado_em timestamptz,
+  gnre_respondido_em timestamptz,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
@@ -209,3 +213,12 @@ ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS nf_pdf_url text;
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('danfes', 'danfes', true)
 ON CONFLICT (id) DO NOTHING;
+
+-- ── Migração: pendência de GNRE (recolhimento de imposto) ────
+-- Execute este bloco no SQL Editor do Supabase:
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS gnre_status text default 'nao_aplica';
+ALTER TABLE pedidos DROP CONSTRAINT IF EXISTS pedidos_gnre_status_check;
+ALTER TABLE pedidos ADD CONSTRAINT pedidos_gnre_status_check check (gnre_status in ('nao_aplica', 'aguardando_resposta', 'cliente_paga', 'liberado_sem_pagar'));
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS gnre_perguntado_em timestamptz;
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS gnre_respondido_em timestamptz;
+CREATE INDEX IF NOT EXISTS idx_pedidos_gnre_aguardando ON pedidos(gnre_perguntado_em) WHERE gnre_status = 'aguardando_resposta';
