@@ -38,6 +38,8 @@ export default function Sidebar() {
     router.push('/login')
   }
 
+  if (pathname === '/login') return null
+
   return (
     <>
       {/* Mobile toggle */}
