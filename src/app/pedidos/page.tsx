@@ -520,74 +520,58 @@ function GnreBanner({ pedido, onUpdate, compact = false }: {
   compact?: boolean
 }) {
   const [saving, setSaving] = useState(false)
-  const resolvido = pedido.gnre_status === 'cliente_paga' || pedido.gnre_status === 'liberado_sem_pagar'
+  const escolha = pedido.gnre_status === 'cliente_paga' || pedido.gnre_status === 'liberado_sem_pagar'
+    ? pedido.gnre_status
+    : null
 
-  async function resolver(decisao: 'cliente_paga' | 'liberado_sem_pagar') {
+  async function escolher(decisao: 'cliente_paga' | 'liberado_sem_pagar') {
     setSaving(true)
     try {
-      await onUpdate({
-        gnre_status: decisao,
-        gnre_perguntado_em: pedido.gnre_perguntado_em ?? new Date().toISOString(),
-        gnre_respondido_em: new Date().toISOString(),
-      })
+      if (escolha === decisao) {
+        // clicar de novo na opção já marcada desfaz a escolha
+        await onUpdate({ gnre_status: 'nao_aplica', gnre_perguntado_em: undefined, gnre_respondido_em: undefined })
+      } else {
+        await onUpdate({
+          gnre_status: decisao,
+          gnre_perguntado_em: pedido.gnre_perguntado_em ?? new Date().toISOString(),
+          gnre_respondido_em: new Date().toISOString(),
+        })
+      }
     } finally {
       setSaving(false)
     }
   }
 
-  async function alterar() {
-    setSaving(true)
-    try {
-      await onUpdate({ gnre_status: 'aguardando_resposta', gnre_respondido_em: undefined })
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  if (resolvido) {
-    const cls = pedido.gnre_status === 'cliente_paga'
-      ? { box: 'border-green-200 bg-green-50', text: 'text-green-700', link: 'text-green-600 hover:text-green-800' }
-      : { box: 'border-blue-200 bg-blue-50', text: 'text-blue-700', link: 'text-blue-600 hover:text-blue-800' }
-    return (
-      <div className={`flex items-center justify-between border rounded-xl px-4 py-2.5 ${cls.box}`}>
-        <span className={`flex items-center gap-2 text-sm font-medium ${cls.text}`}>
-          <CheckCircle2 size={15} /> Imposto (GNRE): {GNRE_LABEL[pedido.gnre_status as 'cliente_paga' | 'liberado_sem_pagar']}
-        </span>
-        {!compact && (
-          <button onClick={alterar} disabled={saving} className={`text-xs underline disabled:opacity-50 ${cls.link}`}>
-            alterar
-          </button>
-        )}
-      </div>
-    )
-  }
-
-  const aguardando = pedido.gnre_status === 'aguardando_resposta'
-  const dias = aguardando ? differenceInDays(new Date(), parseISO(pedido.gnre_perguntado_em ?? pedido.created_at)) : 0
+  const corClientePaga = escolha === 'cliente_paga'
+    ? 'bg-green-600 border-green-600 text-white hover:bg-green-700'
+    : 'bg-white border-gray-300 text-gray-700 hover:bg-green-50 hover:border-green-300 hover:text-green-700'
+  const corLibera = escolha === 'liberado_sem_pagar'
+    ? 'bg-blue-600 border-blue-600 text-white hover:bg-blue-700'
+    : 'bg-white border-gray-300 text-gray-700 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700'
 
   return (
-    <div className={`border rounded-xl ${compact ? 'p-2.5' : 'p-4'} ${aguardando ? 'border-orange-200 bg-orange-50' : 'border-gray-200 bg-gray-50'}`}>
-      <div className={`flex items-center gap-2 font-semibold mb-2 ${compact ? 'text-xs' : 'text-sm'} ${aguardando ? 'text-orange-700' : 'text-gray-600'}`}>
-        <AlertTriangle size={compact ? 13 : 15} />
-        Imposto (GNRE) pendente {aguardando && (dias > 0 ? `· há ${dias} dia${dias > 1 ? 's' : ''}` : '· hoje')}
+    <div className={`border rounded-xl ${compact ? 'p-2.5' : 'p-4'} ${escolha ? 'border-gray-200 bg-gray-50' : 'border-orange-200 bg-orange-50'}`}>
+      <div className={`flex items-center gap-2 font-semibold mb-2 ${compact ? 'text-xs' : 'text-sm'} ${escolha ? 'text-gray-600' : 'text-orange-700'}`}>
+        {escolha ? <CheckCircle2 size={compact ? 13 : 15} /> : <AlertTriangle size={compact ? 13 : 15} />}
+        Imposto (GNRE): {escolha ? GNRE_LABEL[escolha] : 'precisa decidir'}
       </div>
-      {!compact && (
+      {!compact && !escolha && (
         <p className="text-xs text-gray-500 mb-3">
-          O cliente vai recolher o imposto na liberação, ou a mercadoria deve ser liberada sem pagamento?
+          O cliente vai recolher o imposto na liberação, ou a mercadoria deve ser liberada sem pagamento? Clique de novo na opção marcada para desfazer.
         </p>
       )}
       <div className="flex gap-2">
         <button
-          onClick={() => resolver('cliente_paga')}
+          onClick={() => escolher('cliente_paga')}
           disabled={saving}
-          className={`flex-1 font-medium bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-green-50 hover:border-green-300 hover:text-green-700 disabled:opacity-50 ${compact ? 'text-xs py-1.5' : 'text-xs py-2'}`}
+          className={`flex-1 font-medium border rounded-lg disabled:opacity-50 transition-colors ${corClientePaga} ${compact ? 'text-xs py-1.5' : 'text-xs py-2'}`}
         >
           💰 Cliente paga
         </button>
         <button
-          onClick={() => resolver('liberado_sem_pagar')}
+          onClick={() => escolher('liberado_sem_pagar')}
           disabled={saving}
-          className={`flex-1 font-medium bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 disabled:opacity-50 ${compact ? 'text-xs py-1.5' : 'text-xs py-2'}`}
+          className={`flex-1 font-medium border rounded-lg disabled:opacity-50 transition-colors ${corLibera} ${compact ? 'text-xs py-1.5' : 'text-xs py-2'}`}
         >
           🆓 Libera sem pagar
         </button>
@@ -693,7 +677,7 @@ function ModalDetalhe({ pedido: init, onClose, onAvancar, onLembrete, onUpdateDe
         <div className="sticky top-0 bg-white p-6 border-b border-gray-100 flex items-start justify-between z-10">
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-mono text-lg font-bold text-blue-700">{pedido.numero}</span>
+              <span className="font-mono text-lg font-bold text-blue-700">Orç: {pedido.numero}</span>
               <StatusBadge status={pedido.status} />
               <StatusDeltaBadge status={pedido.status_delta} />
               {alertaFaturamento && (
@@ -1062,7 +1046,7 @@ function PedidoCard({ p, danfe, onClick, onConfirmarDanfe, onRejeitarDanfe, onDe
         <div className="flex-1 min-w-0">
           {/* Badges */}
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-mono text-lg font-bold text-blue-700">{p.numero}</span>
+            <span className="font-mono text-lg font-bold text-blue-700">Orç: {p.numero}</span>
             <StatusBadge status={p.status} />
             <StatusDeltaBadge status={p.status_delta} />
             {alertaFaturamento && (

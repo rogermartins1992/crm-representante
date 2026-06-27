@@ -5,6 +5,12 @@ import { verifyWebhookSecret } from '@/lib/verify-webhook-secret'
 
 export const maxDuration = 60
 
+type ItemOrcamento = {
+  produto: string
+  quantidade: number
+  preco_unitario: number
+}
+
 type DadosOrcamento = {
   numero_orcamento: string
   razao_social: string
@@ -15,6 +21,7 @@ type DadosOrcamento = {
   condicao_pagamento: string
   tipo_frete: string
   data_orcamento: string
+  itens: ItemOrcamento[]
 }
 
 async function extrairDadosDoPdf(pdfBase64: string): Promise<DadosOrcamento> {
@@ -25,12 +32,15 @@ async function extrairDadosDoPdf(pdfBase64: string): Promise<DadosOrcamento> {
   "nome_fantasia": "Nome fantasia do cliente",
   "cnpj": "CNPJ do cliente, somente dígitos ou formatado",
   "valor_total": 0,
-  "transportadora": "Transportadora indicada no orçamento",
+  "transportadora": "Nome da transportadora indicada no orçamento. Procure por campos como 'Transportadora', 'Transp.' ou nomes de empresas de transporte/logística no documento. Se realmente não encontrar, retorne string vazia.",
   "condicao_pagamento": "Condição de pagamento (ex: 30/60 DDL)",
   "tipo_frete": "Tipo de frete (ex: CIF, FOB)",
-  "data_orcamento": "Data do orçamento no formato YYYY-MM-DD"
+  "data_orcamento": "Data do orçamento no formato YYYY-MM-DD",
+  "itens": [
+    { "produto": "Descrição/nome do item ou produto", "quantidade": 0, "preco_unitario": 0 }
+  ]
 }
-valor_total deve ser um número. Retorne apenas o JSON, sem explicações.`
+valor_total deve ser um número. quantidade e preco_unitario devem ser números. Liste em "itens" TODOS os produtos/linhas do orçamento, na ordem em que aparecem. Retorne apenas o JSON, sem explicações.`
 
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
@@ -145,6 +155,19 @@ export async function POST(request: NextRequest) {
       .single()
     if (insertError) {
       throw new Error(`[${insertError.code}] ${insertError.message}${insertError.details ? ' — ' + insertError.details : ''}`)
+    }
+
+    const itensValidos = (dados.itens ?? []).filter(i => i.produto?.trim() && i.quantidade > 0)
+    if (itensValidos.length > 0) {
+      const { error: itensError } = await getSupabaseServer()
+        .from('itens_pedido')
+        .insert(itensValidos.map(i => ({
+          pedido_id: pedido.id,
+          produto: i.produto,
+          quantidade: i.quantidade,
+          preco_unitario: i.preco_unitario ?? 0,
+        })))
+      if (itensError) console.error('[processar-pedido] erro ao gravar itens:', itensError)
     }
 
     return NextResponse.json({ success: true, pedido }, { status: 201 })
