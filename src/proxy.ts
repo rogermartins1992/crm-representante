@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseProxyClient } from '@/lib/supabase-proxy'
 
-const PUBLIC_PATHS = ['/login', '/auth/callback']
+// Rotas chamadas server-to-server pelo Make.com (autenticadas por chave
+// secreta própria, x-webhook-secret, dentro da própria rota) — não fazem
+// parte da sessão de usuário do Supabase, então ficam fora do proxy.
+const PUBLIC_PATHS = ['/login', '/auth/callback', '/api/processar-pedido', '/api/processar-danfe']
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
