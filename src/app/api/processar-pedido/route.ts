@@ -47,32 +47,46 @@ async function extrairDadosDoPdf(pdfBase64: string): Promise<DadosOrcamento> {
 }
 valor_total deve ser um número. quantidade e preco_unitario devem ser números. Liste em "itens" TODOS os produtos/linhas do orçamento, na ordem em que aparecem. Retorne apenas o JSON, sem explicações.`
 
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${process.env.OPENROUTER_API_KEY ?? ''}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'openrouter/free',
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'file',
-              file: {
-                filename: 'orcamento.pdf',
-                file_data: `data:application/pdf;base64,${pdfBase64}`,
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 50_000)
+
+  let response: Response
+  try {
+    response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${process.env.OPENROUTER_API_KEY ?? ''}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'openrouter/free',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'file',
+                file: {
+                  filename: 'orcamento.pdf',
+                  file_data: `data:application/pdf;base64,${pdfBase64}`,
+                },
               },
-            },
-            { type: 'text', text: prompt },
-          ],
-        },
-      ],
-      response_format: { type: 'json_object' },
-    }),
-  })
+              { type: 'text', text: prompt },
+            ],
+          },
+        ],
+        response_format: { type: 'json_object' },
+      }),
+    })
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error('A extração do PDF demorou demais e foi cancelada (modelo gratuito sobrecarregado). Tente novamente em alguns minutos.')
+    }
+    throw err
+  } finally {
+    clearTimeout(timeout)
+  }
 
   if (!response.ok) {
     const errorText = await response.text()
@@ -83,7 +97,11 @@ valor_total deve ser um número. quantidade e preco_unitario devem ser números.
   const text: string | undefined = json.choices?.[0]?.message?.content
   if (!text) throw new Error('O OpenRouter não retornou os dados extraídos do orçamento.')
 
-  return JSON.parse(text) as DadosOrcamento
+  try {
+    return JSON.parse(text) as DadosOrcamento
+  } catch {
+    throw new Error(`O OpenRouter retornou um conteúdo que não é JSON válido: ${text.slice(0, 300)}`)
+  }
 }
 
 async function buscarOuCriarCliente(dados: DadosOrcamento): Promise<string | null> {
