@@ -45,7 +45,8 @@ async function extrairDadosDoPdf(pdfBase64: string): Promise<DadosOrcamento> {
     { "codigo": "Código/referência do produto, se houver no documento (senão string vazia)", "produto": "Descrição/nome do item ou produto", "quantidade": 0, "preco_unitario": 0 }
   ]
 }
-valor_total deve ser um número. quantidade e preco_unitario devem ser números. Liste em "itens" TODOS os produtos/linhas do orçamento, na ordem em que aparecem. Retorne apenas o JSON, sem explicações.`
+valor_total deve ser um número. quantidade e preco_unitario devem ser números. Liste em "itens" TODOS os produtos/linhas do orçamento, na ordem em que aparecem.
+IMPORTANTE: responda SOMENTE com o objeto JSON acima preenchido. Não transcreva o PDF, não inclua tabelas em texto, markdown ou qualquer explicação — apenas o JSON.`
 
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 50_000)
@@ -60,7 +61,7 @@ valor_total deve ser um número. quantidade e preco_unitario devem ser números.
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'openrouter/free',
+        model: 'google/gemini-2.0-flash-exp:free',
         messages: [
           {
             role: 'user',
@@ -100,7 +101,16 @@ valor_total deve ser um número. quantidade e preco_unitario devem ser números.
   try {
     return JSON.parse(text) as DadosOrcamento
   } catch {
-    throw new Error(`O OpenRouter retornou um conteúdo que não é JSON válido: ${text.slice(0, 300)}`)
+    // Alguns modelos envolvem o JSON em markdown ou texto extra mesmo com instrução contrária.
+    const match = text.match(/\{[\s\S]*\}/)
+    if (match) {
+      try {
+        return JSON.parse(match[0]) as DadosOrcamento
+      } catch {
+        // cai no erro abaixo
+      }
+    }
+    throw new Error(`O modelo de IA não retornou um JSON válido. Tente novamente. Início da resposta: ${text.slice(0, 300)}`)
   }
 }
 
