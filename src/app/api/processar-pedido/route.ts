@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { GoogleGenerativeAI, SchemaType, ObjectSchema } from '@google/generative-ai'
 import { getSupabaseServer } from '@/lib/supabase-server'
 import { normalizeCnpj } from '@/lib/format'
 import { verifyWebhookOrSession } from '@/lib/verify-webhook-secret'
@@ -27,90 +28,66 @@ type DadosOrcamento = {
   itens: ItemOrcamento[]
 }
 
-async function extrairDadosDoPdf(pdfBase64: string): Promise<DadosOrcamento> {
-  const prompt = `Extraia os dados deste orçamento da Delta Plus e retorne um JSON com exatamente estes campos:
-{
-  "numero_orcamento": "Número do orçamento",
-  "razao_social": "Razão social do cliente",
-  "nome_fantasia": "Nome fantasia do cliente",
-  "cnpj": "CNPJ do cliente, somente dígitos ou formatado",
-  "cidade": "Cidade do endereço do cliente/destinatário",
-  "estado": "Sigla do estado (UF) do endereço do cliente, ex: SP, MT",
-  "valor_total": 0,
-  "transportadora": "Nome da transportadora indicada no orçamento. Procure por campos como 'Transportadora', 'Transp.' ou nomes de empresas de transporte/logística no documento. Se realmente não encontrar, retorne string vazia.",
-  "condicao_pagamento": "Condição de pagamento (ex: 30/60 DDL)",
-  "tipo_frete": "Tipo de frete (ex: CIF, FOB)",
-  "data_orcamento": "Data do orçamento no formato YYYY-MM-DD",
-  "itens": [
-    { "codigo": "Código/referência do produto, se houver no documento (senão string vazia)", "produto": "Descrição/nome do item ou produto", "quantidade": 0, "preco_unitario": 0 }
-  ]
+const ITEM_SCHEMA: ObjectSchema = {
+  type: SchemaType.OBJECT,
+  properties: {
+    codigo: { type: SchemaType.STRING, description: 'Código/referência do produto, se houver. Senão, string vazia.' },
+    produto: { type: SchemaType.STRING, description: 'Descrição/nome do item' },
+    quantidade: { type: SchemaType.NUMBER, description: 'Quantidade do item' },
+    preco_unitario: { type: SchemaType.NUMBER, description: 'Preço unitário do item, em reais' },
+  },
+  required: ['produto', 'quantidade', 'preco_unitario'],
 }
-valor_total deve ser um número. quantidade e preco_unitario devem ser números. Liste em "itens" TODOS os produtos/linhas do orçamento, na ordem em que aparecem.
-IMPORTANTE: responda SOMENTE com o objeto JSON acima preenchido. Não transcreva o PDF, não inclua tabelas em texto, markdown ou qualquer explicação — apenas o JSON.`
 
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 50_000)
+const RESPONSE_SCHEMA: ObjectSchema = {
+  type: SchemaType.OBJECT,
+  properties: {
+    numero_orcamento: { type: SchemaType.STRING, description: 'Número do orçamento' },
+    razao_social: { type: SchemaType.STRING, description: 'Razão social do cliente' },
+    nome_fantasia: { type: SchemaType.STRING, description: 'Nome fantasia do cliente' },
+    cnpj: { type: SchemaType.STRING, description: 'CNPJ do cliente, somente dígitos ou formatado' },
+    cidade: { type: SchemaType.STRING, description: 'Cidade do endereço do cliente/destinatário' },
+    estado: { type: SchemaType.STRING, description: 'Sigla do estado (UF) do endereço do cliente, ex: SP, MT' },
+    valor_total: { type: SchemaType.NUMBER, description: 'Valor total do orçamento, em reais' },
+    transportadora: { type: SchemaType.STRING, description: 'Nome da transportadora indicada no orçamento' },
+    condicao_pagamento: { type: SchemaType.STRING, description: 'Condição de pagamento (ex: 30/60 DDL)' },
+    tipo_frete: { type: SchemaType.STRING, description: 'Tipo de frete (ex: CIF, FOB)' },
+    data_orcamento: { type: SchemaType.STRING, description: 'Data do orçamento no formato YYYY-MM-DD' },
+    itens: { type: SchemaType.ARRAY, items: ITEM_SCHEMA, description: 'Todos os produtos/linhas do orçamento, na ordem em que aparecem' },
+  },
+  required: [
+    'numero_orcamento', 'razao_social', 'nome_fantasia', 'cnpj', 'valor_total',
+    'transportadora', 'condicao_pagamento', 'tipo_frete', 'data_orcamento', 'itens',
+  ],
+}
 
-  let response: Response
-  try {
-    response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      signal: controller.signal,
-      headers: {
-        Authorization: `Bearer ${process.env.OPENROUTER_API_KEY ?? ''}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.0-flash-exp:free',
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'file',
-                file: {
-                  filename: 'orcamento.pdf',
-                  file_data: `data:application/pdf;base64,${pdfBase64}`,
-                },
-              },
-              { type: 'text', text: prompt },
-            ],
-          },
-        ],
-        response_format: { type: 'json_object' },
-      }),
-    })
-  } catch (err) {
-    if (err instanceof Error && err.name === 'AbortError') {
-      throw new Error('A extração do PDF demorou demais e foi cancelada (modelo gratuito sobrecarregado). Tente novamente em alguns minutos.')
-    }
-    throw err
-  } finally {
-    clearTimeout(timeout)
-  }
+async function extrairDadosDoPdf(pdfBase64: string): Promise<DadosOrcamento> {
+  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? '')
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-2.5-flash',
+    generationConfig: {
+      responseMimeType: 'application/json',
+      responseSchema: RESPONSE_SCHEMA,
+    },
+  })
 
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`OpenRouter error ${response.status}: ${errorText}`)
-  }
+  const result = await Promise.race([
+    model.generateContent([
+      { inlineData: { mimeType: 'application/pdf', data: pdfBase64 } },
+      { text: 'Extraia os dados deste orçamento da Delta Plus conforme o schema fornecido. Procure cuidadosamente por cidade/estado do destinatário e pelo nome da transportadora no documento.' },
+    ]),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('A extração do PDF demorou demais e foi cancelada. Tente novamente.')), 50_000)
+    ),
+  ])
 
-  const json = await response.json()
-  const text: string | undefined = json.choices?.[0]?.message?.content
-  if (!text) throw new Error('O OpenRouter não retornou os dados extraídos do orçamento.')
+  const text = result.response.text()
+  if (!text) throw new Error('O Gemini não retornou os dados extraídos do orçamento.')
 
   try {
     return JSON.parse(text) as DadosOrcamento
   } catch {
-    // Alguns modelos envolvem o JSON em markdown ou texto extra mesmo com instrução contrária.
-    const match = text.match(/\{[\s\S]*\}/)
-    if (match) {
-      try {
-        return JSON.parse(match[0]) as DadosOrcamento
-      } catch {
-        // cai no erro abaixo
-      }
-    }
-    throw new Error(`O modelo de IA não retornou um JSON válido. Tente novamente. Início da resposta: ${text.slice(0, 300)}`)
+    throw new Error(`O Gemini não retornou um JSON válido. Início da resposta: ${text.slice(0, 300)}`)
   }
 }
 
