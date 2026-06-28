@@ -17,6 +17,8 @@ type DadosOrcamento = {
   razao_social: string
   nome_fantasia: string
   cnpj: string
+  cidade: string
+  estado: string
   valor_total: number
   transportadora: string
   condicao_pagamento: string
@@ -32,6 +34,8 @@ async function extrairDadosDoPdf(pdfBase64: string): Promise<DadosOrcamento> {
   "razao_social": "Razão social do cliente",
   "nome_fantasia": "Nome fantasia do cliente",
   "cnpj": "CNPJ do cliente, somente dígitos ou formatado",
+  "cidade": "Cidade do endereço do cliente/destinatário",
+  "estado": "Sigla do estado (UF) do endereço do cliente, ex: SP, MT",
   "valor_total": 0,
   "transportadora": "Nome da transportadora indicada no orçamento. Procure por campos como 'Transportadora', 'Transp.' ou nomes de empresas de transporte/logística no documento. Se realmente não encontrar, retorne string vazia.",
   "condicao_pagamento": "Condição de pagamento (ex: 30/60 DDL)",
@@ -88,11 +92,19 @@ async function buscarOuCriarCliente(dados: DadosOrcamento): Promise<string | nul
   const supabaseServer = getSupabaseServer()
   const { data: existente, error: buscaError } = await supabaseServer
     .from('clientes')
-    .select('id')
+    .select('id, cidade, estado')
     .eq('cnpj', dados.cnpj)
     .maybeSingle()
   if (buscaError) throw new Error(`[${buscaError.code}] ${buscaError.message}`)
-  if (existente) return existente.id
+  if (existente) {
+    if (!existente.cidade && (dados.cidade || dados.estado)) {
+      await supabaseServer
+        .from('clientes')
+        .update({ cidade: dados.cidade || undefined, estado: dados.estado || undefined })
+        .eq('id', existente.id)
+    }
+    return existente.id
+  }
 
   const { data: novo, error: criaError } = await supabaseServer
     .from('clientes')
@@ -100,6 +112,8 @@ async function buscarOuCriarCliente(dados: DadosOrcamento): Promise<string | nul
       nome: dados.nome_fantasia || dados.razao_social,
       empresa: dados.razao_social,
       cnpj: dados.cnpj,
+      cidade: dados.cidade || undefined,
+      estado: dados.estado || undefined,
     })
     .select('id')
     .single()
