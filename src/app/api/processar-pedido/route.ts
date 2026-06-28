@@ -6,6 +6,7 @@ import { verifyWebhookOrSession } from '@/lib/verify-webhook-secret'
 export const maxDuration = 60
 
 type ItemOrcamento = {
+  codigo: string
   produto: string
   quantidade: number
   preco_unitario: number
@@ -37,7 +38,7 @@ async function extrairDadosDoPdf(pdfBase64: string): Promise<DadosOrcamento> {
   "tipo_frete": "Tipo de frete (ex: CIF, FOB)",
   "data_orcamento": "Data do orçamento no formato YYYY-MM-DD",
   "itens": [
-    { "produto": "Descrição/nome do item ou produto", "quantidade": 0, "preco_unitario": 0 }
+    { "codigo": "Código/referência do produto, se houver no documento (senão string vazia)", "produto": "Descrição/nome do item ou produto", "quantidade": 0, "preco_unitario": 0 }
   ]
 }
 valor_total deve ser um número. quantidade e preco_unitario devem ser números. Liste em "itens" TODOS os produtos/linhas do orçamento, na ordem em que aparecem. Retorne apenas o JSON, sem explicações.`
@@ -163,6 +164,7 @@ export async function POST(request: NextRequest) {
         .from('itens_pedido')
         .insert(itensValidos.map(i => ({
           pedido_id: pedido.id,
+          codigo: i.codigo || undefined,
           produto: i.produto,
           quantidade: i.quantidade,
           preco_unitario: i.preco_unitario ?? 0,

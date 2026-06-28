@@ -78,6 +78,7 @@ create table if not exists pedidos (
 create table if not exists itens_pedido (
   id uuid default gen_random_uuid() primary key,
   pedido_id uuid references pedidos(id) on delete cascade,
+  codigo text,
   produto text not null,
   quantidade integer not null default 1,
   preco_unitario numeric(10,2) not null,
@@ -222,3 +223,15 @@ ALTER TABLE pedidos ADD CONSTRAINT pedidos_gnre_status_check check (gnre_status 
 ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS gnre_perguntado_em timestamptz;
 ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS gnre_respondido_em timestamptz;
 CREATE INDEX IF NOT EXISTS idx_pedidos_gnre_aguardando ON pedidos(gnre_perguntado_em) WHERE gnre_status = 'aguardando_resposta';
+
+-- ── Migração: simplifica GNRE para Sim/Não/Talvez ────────────
+-- Execute este bloco no SQL Editor do Supabase:
+UPDATE pedidos SET gnre_status = 'sim' WHERE gnre_status = 'cliente_paga';
+UPDATE pedidos SET gnre_status = 'nao' WHERE gnre_status = 'liberado_sem_pagar';
+UPDATE pedidos SET gnre_status = 'nao_aplica' WHERE gnre_status = 'aguardando_resposta';
+ALTER TABLE pedidos DROP CONSTRAINT IF EXISTS pedidos_gnre_status_check;
+ALTER TABLE pedidos ADD CONSTRAINT pedidos_gnre_status_check check (gnre_status in ('nao_aplica', 'sim', 'nao', 'talvez'));
+
+-- ── Migração: código do item no pedido ───────────────────────
+-- Execute este bloco no SQL Editor do Supabase:
+ALTER TABLE itens_pedido ADD COLUMN IF NOT EXISTS codigo text;

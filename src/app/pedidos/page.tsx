@@ -509,10 +509,16 @@ function ModalNovoPedido({ onClose, onSave, clientes }: {
 
 const GNRE_LABEL: Record<NonNullable<Pedido['gnre_status']>, string> = {
   nao_aplica: '',
-  aguardando_resposta: 'Aguardando decisão do GNRE',
-  cliente_paga: 'Cliente vai recolher o imposto',
-  liberado_sem_pagar: 'Liberado sem recolhimento',
+  sim: 'Sim, recolhe o imposto',
+  nao: 'Não recolhe o imposto',
+  talvez: 'Talvez recolha o imposto',
 }
+
+const GNRE_OPCOES: { valor: 'sim' | 'nao' | 'talvez'; emoji: string; label: string; corAtivo: string; corHover: string }[] = [
+  { valor: 'sim', emoji: '✅', label: 'Sim', corAtivo: 'bg-green-600 border-green-600 text-white hover:bg-green-700', corHover: 'hover:bg-green-50 hover:border-green-300 hover:text-green-700' },
+  { valor: 'nao', emoji: '❌', label: 'Não', corAtivo: 'bg-red-600 border-red-600 text-white hover:bg-red-700', corHover: 'hover:bg-red-50 hover:border-red-300 hover:text-red-700' },
+  { valor: 'talvez', emoji: '🤔', label: 'Talvez', corAtivo: 'bg-amber-500 border-amber-500 text-white hover:bg-amber-600', corHover: 'hover:bg-amber-50 hover:border-amber-300 hover:text-amber-700' },
+]
 
 function GnreBanner({ pedido, onUpdate, compact = false }: {
   pedido: Pedido
@@ -520,11 +526,11 @@ function GnreBanner({ pedido, onUpdate, compact = false }: {
   compact?: boolean
 }) {
   const [saving, setSaving] = useState(false)
-  const escolha = pedido.gnre_status === 'cliente_paga' || pedido.gnre_status === 'liberado_sem_pagar'
+  const escolha = pedido.gnre_status === 'sim' || pedido.gnre_status === 'nao' || pedido.gnre_status === 'talvez'
     ? pedido.gnre_status
     : null
 
-  async function escolher(decisao: 'cliente_paga' | 'liberado_sem_pagar') {
+  async function escolher(decisao: 'sim' | 'nao' | 'talvez') {
     setSaving(true)
     try {
       if (escolha === decisao) {
@@ -542,39 +548,30 @@ function GnreBanner({ pedido, onUpdate, compact = false }: {
     }
   }
 
-  const corClientePaga = escolha === 'cliente_paga'
-    ? 'bg-green-600 border-green-600 text-white hover:bg-green-700'
-    : 'bg-white border-gray-300 text-gray-700 hover:bg-green-50 hover:border-green-300 hover:text-green-700'
-  const corLibera = escolha === 'liberado_sem_pagar'
-    ? 'bg-blue-600 border-blue-600 text-white hover:bg-blue-700'
-    : 'bg-white border-gray-300 text-gray-700 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700'
-
   return (
     <div className={`border rounded-xl ${compact ? 'p-2.5' : 'p-4'} ${escolha ? 'border-gray-200 bg-gray-50' : 'border-orange-200 bg-orange-50'}`}>
       <div className={`flex items-center gap-2 font-semibold mb-2 ${compact ? 'text-xs' : 'text-sm'} ${escolha ? 'text-gray-600' : 'text-orange-700'}`}>
         {escolha ? <CheckCircle2 size={compact ? 13 : 15} /> : <AlertTriangle size={compact ? 13 : 15} />}
-        Imposto (GNRE): {escolha ? GNRE_LABEL[escolha] : 'precisa decidir'}
+        Cliente recolhe imposto (GNRE)? {escolha ? `${GNRE_OPCOES.find(o => o.valor === escolha)?.emoji} ${GNRE_LABEL[escolha]}` : ''}
       </div>
       {!compact && !escolha && (
         <p className="text-xs text-gray-500 mb-3">
-          O cliente vai recolher o imposto na liberação, ou a mercadoria deve ser liberada sem pagamento? Clique de novo na opção marcada para desfazer.
+          Clique de novo na opção marcada para desfazer.
         </p>
       )}
       <div className="flex gap-2">
-        <button
-          onClick={() => escolher('cliente_paga')}
-          disabled={saving}
-          className={`flex-1 font-medium border rounded-lg disabled:opacity-50 transition-colors ${corClientePaga} ${compact ? 'text-xs py-1.5' : 'text-xs py-2'}`}
-        >
-          💰 Cliente paga
-        </button>
-        <button
-          onClick={() => escolher('liberado_sem_pagar')}
-          disabled={saving}
-          className={`flex-1 font-medium border rounded-lg disabled:opacity-50 transition-colors ${corLibera} ${compact ? 'text-xs py-1.5' : 'text-xs py-2'}`}
-        >
-          🆓 Libera sem pagar
-        </button>
+        {GNRE_OPCOES.map(opcao => (
+          <button
+            key={opcao.valor}
+            onClick={() => escolher(opcao.valor)}
+            disabled={saving}
+            className={`flex-1 font-medium border rounded-lg disabled:opacity-50 transition-colors ${
+              escolha === opcao.valor ? opcao.corAtivo : `bg-white border-gray-300 text-gray-700 ${opcao.corHover}`
+            } ${compact ? 'text-xs py-1.5' : 'text-xs py-2'}`}
+          >
+            {opcao.emoji} {opcao.label}
+          </button>
+        ))}
       </div>
     </div>
   )
@@ -748,6 +745,7 @@ function ModalDetalhe({ pedido: init, onClose, onAvancar, onLembrete, onUpdateDe
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 text-xs text-gray-500 font-medium">
                     <tr>
+                      <th className="text-left px-3 py-2 w-20">Código</th>
                       <th className="text-left px-3 py-2">Produto</th>
                       <th className="text-center px-3 py-2 w-14">Qtd</th>
                       <th className="text-right px-3 py-2 w-28">Subtotal</th>
@@ -756,6 +754,7 @@ function ModalDetalhe({ pedido: init, onClose, onAvancar, onLembrete, onUpdateDe
                   <tbody className="divide-y divide-gray-100">
                     {items.map(i => (
                       <tr key={i.id}>
+                        <td className="px-3 py-2 text-gray-500 font-mono text-xs">{i.codigo || '—'}</td>
                         <td className="px-3 py-2 text-gray-800">{i.produto}</td>
                         <td className="px-3 py-2 text-center text-gray-600">{i.quantidade}</td>
                         <td className="px-3 py-2 text-right font-medium text-gray-700">
@@ -767,7 +766,7 @@ function ModalDetalhe({ pedido: init, onClose, onAvancar, onLembrete, onUpdateDe
                   {items.length > 1 && (
                     <tfoot>
                       <tr className="bg-gray-50">
-                        <td colSpan={2} className="px-3 py-2 text-right text-sm font-semibold text-gray-700">Total</td>
+                        <td colSpan={3} className="px-3 py-2 text-right text-sm font-semibold text-gray-700">Total</td>
                         <td className="px-3 py-2 text-right font-bold text-gray-900">
                           {itemsTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                         </td>
@@ -1063,7 +1062,9 @@ function PedidoCard({ p, danfe, onClick, onConfirmarDanfe, onRejeitarDanfe, onDe
 
           {/* Cliente */}
           <p className="font-semibold text-gray-800 mt-1.5">{p.clientes?.empresa}</p>
-          <p className="text-xs text-gray-500">{p.clientes?.nome}{p.cnpj ? ` · CNPJ: ${formatCnpj(p.cnpj)}` : ''}</p>
+          <p className="text-xs text-gray-500">
+            {p.clientes?.nome}{p.cnpj ? ` · CNPJ: ${formatCnpj(p.cnpj)}` : ''}{p.clientes?.cidade ? ` · ${p.clientes.cidade}` : ''}
+          </p>
 
           {/* Campos Delta inline */}
           <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-2 text-xs text-gray-500">
@@ -1076,7 +1077,7 @@ function PedidoCard({ p, danfe, onClick, onConfirmarDanfe, onRejeitarDanfe, onDe
               </span>
             )}
             {p.condicao_pagamento && (
-              <span>Pagamento: {p.condicao_pagamento}</span>
+              <span>Condição: {p.condicao_pagamento}</span>
             )}
             {p.numero_nf && (
               <span className="flex items-center gap-1">

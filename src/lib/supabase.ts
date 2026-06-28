@@ -74,7 +74,7 @@ export type Pedido = {
   nf_status?: 'pendente' | 'capturada' | 'erro'
   nf_pdf_url?: string
   // campos pendência de GNRE (recolhimento de imposto na liberação da mercadoria)
-  gnre_status?: 'nao_aplica' | 'aguardando_resposta' | 'cliente_paga' | 'liberado_sem_pagar'
+  gnre_status?: 'nao_aplica' | 'sim' | 'nao' | 'talvez'
   gnre_perguntado_em?: string
   gnre_respondido_em?: string
   created_at: string
@@ -86,6 +86,7 @@ export type Pedido = {
 export type ItemPedido = {
   id: string
   pedido_id: string
+  codigo?: string
   produto: string
   quantidade: number
   preco_unitario: number
